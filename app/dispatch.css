@@ -1,0 +1,143 @@
+.nav-item.active.shipments {
+  border-left-color: #fcd34d;
+  background: rgba(217, 119, 6, .2);
+  color: #fcd34d;
+}
+
+.content > .error {
+  position: fixed;
+  z-index: 30;
+  top: 72px;
+  right: 20px;
+  width: min(420px, calc(100vw - 40px));
+  box-shadow: 0 10px 30px rgba(15, 35, 72, .18);
+}
+
+.empty-cell {
+  padding: 44px 18px;
+  text-align: center;
+  color: var(--muted);
+  white-space: normal;
+}
+
+.dispatch-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 2fr) minmax(0, 3fr);
+  gap: 20px;
+  max-width: 1300px;
+  align-items: start;
+}
+
+.card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-heading h2,
+.delivery-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.queue-count {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fffbeb;
+  color: #d97706;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.queue-item {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.queue-title {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.queue-title small {
+  display: block;
+  max-width: 260px;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.queue-item p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.queue-item p b {
+  color: var(--foreground);
+}
+
+.queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.queue-actions .primary {
+  flex: 1;
+}
+
+.queue-actions .icon-button {
+  flex: none;
+  width: 35px;
+  height: 35px;
+  margin: 0;
+}
+
+.queue-create {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: calc(100% - 32px);
+  margin: 16px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.queue-empty {
+  margin: 0;
+  padding: 35px 18px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+.dispatch-grid .toolbar {
+  align-items: center;
+}
+
+.dispatch-grid .search {
+  flex-basis: 170px;
+}
+
+@media (max-width: 1120px) {
+  .dispatch-grid {
+    grid-template-columns: 1fr;
+  }
+}

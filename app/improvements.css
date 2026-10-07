@@ -1,0 +1,26 @@
+.shipment-picker.wide { grid-column: 1 / -1; }
+.stock-warning { color: #b91c1c !important; font-weight: 700; }
+.shipment-limit-note { margin: 8px 0 0; padding: 8px 10px; border: 1px solid #fde68a; border-radius: 7px; background: #fffbeb; color: #92400e; font-size: 12px; font-weight: 700; }
+.active-filter { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid #fde68a; background: #fffbeb; color: #92400e; font-size: 12px; }
+.active-filter button { margin-left: auto; border: 0; background: transparent; color: #92400e; font-weight: 700; text-decoration: underline; }
+.modal-error-anchor:focus { outline: 2px solid #dc2626; outline-offset: 2px; border-radius: 8px; }
+.soon-nav { cursor: default; }
+.soon-nav small { margin-left: auto; color: #9ab0d4; font-size: 9px; white-space: nowrap; }
+.mobile-signout { display: none; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--navy); }
+.content > .error, .workspace-notice { position: fixed; z-index: 30; top: 72px; right: 20px; width: min(420px, calc(100vw - 40px)); box-shadow: 0 10px 30px rgba(15,35,72,.18); }
+.content > .error span { flex: 1; }
+.content > .error button, .workspace-notice button { margin-left: auto; border: 0; background: transparent; color: inherit; }
+.success-notice { display: flex; align-items: center; gap: 8px; margin-bottom: 15px; padding: 10px 12px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; color: #166534; font-size: 13px; }
+.loading-records { padding: 35px; color: var(--muted); text-align: center; font-size: 13px; }
+.modal { width: min(700px, 100%); }
+@media (max-width: 760px) {
+  .sidebar { width: 58px; }
+  .side-brand { min-height: 60px; padding: 11px 10px; }
+  .side-brand .brand > span:last-child { display: none; }
+  .side-brand .brand-icon { width: 38px; height: 38px; flex: none; }
+  .soon-nav > span, .soon-nav small { display: none; }
+  .soon-nav { justify-content: center; }
+  .mobile-signout { display: grid; }
+  .shipment-picker.wide { grid-column: 1 / -1; }
+  .top-actions > svg { display: none; }
+}
