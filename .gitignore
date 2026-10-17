@@ -31,6 +31,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!**/.env.example
 
 # vercel
 .vercel
@@ -44,7 +45,44 @@ next-env.d.ts
 /.agents/
 /.codex/
 /outputs/
+/output/
 /work/
 /.firebase-cli-config/
 /.firebase/
 /*-debug.log
+/backend/functions/node_modules/
+/backend/functions/validation.js
+/backend/functions/procurementValidation.js
+/backend/functions/locationStock.js
+/backend/functions/integrity.js
+/research/__pycache__/
+/research/.venv/
+/research/models/
+/blockchain/node_modules/
+/blockchain/artifacts/
+/blockchain/cache/
+
+# Disposable emulator export folders may contain test authentication data.
+/firebase-export-*/
+
+# Private credentials, local Python environments and research artefacts.
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.key
+*.p12
+*.pfx
+*service-account*.json
+*firebase-adminsdk*.json
+*credentials*.json
+*.joblib
+*.pkl
+*.keras
+*.h5
+/research/datasets/
+/datasets/
+/research/data/*
+!/research/data/inventory-template.csv
+!/research/data/delivery-template.csv

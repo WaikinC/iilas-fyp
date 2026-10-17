@@ -1,6 +1,31 @@
 # IILAS Full-Scope Traceability
 
-**Reviewed:** 7 October 2026  
+## Stock/location/correction traceability — 10 October 2026
+
+Inventory FR-17, FR-18 movement retry protection and FR-30 linked corrections have local implementation in lib/locationStock.js, validation.js, trusted stock/approval/warehouse/dispatch transactions, Firestore correction-claim rules, Stock Management and Reporting & Verification. The scenario/emulator/browser evidence and versioned integrity format are recorded in docs/STOCK_LOCATIONS_CORRECTIONS_2026-10-10.md.
+
+Inventory FR-14–FR-20 and Logistics FR-4 retain exact per-bin reservation, cancellation and dispatch through the Prepared-Shipment Handover. Original IDs/totals and historical v1 hashes remain compatible. Full duplicate discovery, all verification exception/report requirements, persisted FR-21/FR-27 reorder links, evaluated stock risk, staged logistics evidence/scoring and production acceptance remain partial. Historical descriptions below are dated baselines.
+
+## Procurement continuation traceability — 10 October 2026
+
+Inventory FR-22 supplier editing and the correction/rejection/remarks portions of FR-24–FR-25 now have a dedicated UI, shared validation, trusted transactions, private uniqueness rules, immutable history and local emulator/browser evidence. Reference/receipt duplicates, inactive records, self-review, stale/concurrent actions, over-receipts and capacity rollback are covered. Receipt movements link to their order and event without altering existing IDs. See docs/PROCUREMENT_VALIDATION_2026-10-10.md.
+
+FR-21/FR-27 persisted reorder requirements and risk-to-reorder-to-purchase linkage remain partial. This does not complete all procurement, stock/location, research, logistics or production requirements. Shared primitive validation also hardens product/stock/shipment/warehouse and common server boundaries; it is not final scenario acceptance of every module. This update supersedes the historical pending supplier-edit/rejection descriptions below.
+
+## Latest manual retry and operational fixes — 9 October 2026
+
+The audit's pending-order and terminal-alert defects are fixed locally. FR-18 is partially strengthened by validated operation IDs, atomic private receipts, immutable replay/outcome-check transactions and tested browser recovery. Internal handover/PO/dispatch contracts remain. Business references may repeat for legitimate partial movements; multi-location transfers, correction links and broader duplicate discovery remain unfinished. See docs/CONTINUATION_REVIEW_2026-10-09.md for new emulator/browser evidence and ordered work for both students. This continuation does not establish full module, production or research completion.
+
+## Detailed module audit — 9 October 2026
+
+See [MODULE_COMPLETION_AUDIT_2026-10-09.md](docs/MODULE_COMPLETION_AUDIT_2026-10-09.md). Reviewing the current source against both saved original portfolios found incomplete functional requirements beyond production and research evaluation: stock-risk/reorder linkage, quantity-based transfers/corrections, purchase rejection/supplier editing, pre-dispatch evidence, persisted abnormality scoring, reporting filters and restricted customer access. Core local workflow tests do not establish full module completion. Prioritise the concrete pending-order/returned-alert defects and movement retry/reference protection, then close required feature gaps alongside data collection and production preparation.
+
+## Latest dashboard evidence — 9 October 2026
+
+The original prototype dashboard/theme has been restored in the React application using shared product, purchase, warehouse-prepared shipment, delivery, prediction, evidence and registration records. Inventory trend derives recorded Receipt/Issue history; Driver summaries filter assigned deliveries. Missing/stale AI results are explicit and no inference or chain processing is performed by the dashboard. See docs/UI_UX_THEME_2026-10-09.md for exact meanings, QA evidence and remaining release/evaluation tasks. This replaces the green UI direction; module ownership and integration contracts are unchanged.
+
+**Reviewed:** 8 October 2026
+
 **Purpose:** Consolidate the final Project 1 scope for Wong Ric Hang and Choong Wai Kin and distinguish it from the deployed CRUD prototype.
 
 ## Authoritative source folders
@@ -16,6 +41,8 @@
    Final document used: `final Project 1/Copy of Project 1 Portfolio Choong Wai Kin.docx`, supported by the chapter and diagram files in the same folder.
 
 Older duplicate, editing, feedback, and shortcut copies were not treated as the main requirements when a newer aligned or final copy was available.
+
+Supplementary combined folder: <https://drive.google.com/drive/folders/1XBhWL_9fNd1OOn_rxkbWY8gOIbR7sqrW>. Both original Word portfolios are saved with SHA-256 metadata in the context archive. Their contents still require final reconciliation with the previously reviewed requirements; filenames alone do not establish that they supersede this baseline.
 
 ## Integrated system boundary
 
@@ -158,7 +185,28 @@ This is browser geolocation. It should not be described as a complete IoT implem
 - Store the blockchain transaction reference with the Firestore verification record.
 - Explain that a hash match proves consistency with registered bytes, not the truth of the original evidence.
 
-## Current prototype coverage
+## UI/UX evidence — 8 October 2026
+
+Inventory FR-14–FR-20 and Logistics FR-4 remain connected by the warehouse/dispatch workflow. The refined dashboard and navigation expose that boundary. Search/filter/pagination, account approval and responsive access are implemented locally; 11 module screens fit 1440, 768, 390 and 320px in Playwright. Client pagination is not server-side query pagination. See docs/UI_UX_REFINEMENT_2026-10-08.md.
+
+## Local implementation coverage — 8 October 2026
+
+| Area | Current evidence/state |
+|---|---|
+| Shared accounts/roles — FR-1–FR-3 | One shared system, Pending registration, Admin approval/roles/disable/reactivate, protected initial Admin, fixed data source and old-record preservation; organisation/invitation flow removed |
+| Products/stock | Catalogue, six movements, protected warehouse allocations, adjustment approval and transactional audits |
+| Warehouse/handover | Picking allocation, packing, audited Prepared handover, cancellation/restart before completion and exactly-once dispatch |
+| Procurement | Supplier edits, independent approval/rejection remarks, correction/revision, cancellation, unique references/notes, partial/full atomic receipts, immutable history, filters/pagination; persisted reorder source links remain |
+| Transport/fleet | Unique vehicle/driver registration, capacity/availability, assignment locks, schedules/cancellation, maintenance/fuel |
+| Delivery/evidence/maps | Ordered events, proof-required completion, immutable hashed Storage evidence, validated explicit locations, Leaflet/OSM latest-position display |
+| Research AI/vision | Training/inference/evaluation code, baselines and software tests; no labelled data or final evaluated models available |
+| Blockchain | Solidity registry, fixed SHA-256 formats, contract tests and both confirmed-receipt backend/Firestore workflows tested locally |
+| Reporting/review | CSV exports, adjustments and human prediction review; larger-volume pagination remains an extension |
+| Production | Earlier hosted release remains; shared release not yet deployed or accepted |
+
+Final research completion requires genuine labelled datasets, held-out evaluation, configured inference and assessment evidence. Refer to docs/RELEASE_STATUS_2026-10-08.md and PROJECT_ROADMAP.md. The original coverage table below is retained as the historical starting point.
+
+## Historical prototype coverage
 
 | Area | Current state |
 |---|---|
@@ -168,7 +216,7 @@ This is browser geolocation. It should not be described as a complete IoT implem
 | Dashboard | Implemented for current products, shipments, and audit activity |
 | Security rules | Implemented for the current prototype data model |
 | Stock Management | Receipt, issue, adjustment, reservation, release, full-balance transfer, movement history, availability, reorder indicators, and audit enforcement are implemented; Random Forest stock risk remains |
-| Warehouse Operations | Picking/packing fields exist; full warehouse module is not implemented |
+| Warehouse Operations | Picking → Packed → HandedOver workflow, actors/timestamps, frozen shipment contents, immutable completion, and atomic Prepared handover into dispatch are implemented; stock operations use Stock Management. Cancellation and automatic allocation remain |
 | Replenishment & Procurement | Not implemented |
 | Transport Management | Not implemented |
 | Fleet Management | Not implemented |
@@ -216,3 +264,7 @@ The deployed site is a valid first CRUD prototype, but it does not yet satisfy t
 - Isolation Forest is optional experimentation, not a required production model.
 - Route optimisation, continuous background GPS, public blockchain, cryptocurrency, and automatic punitive decisions are outside the committed minimum.
 - IoT remains optional unless the reports are formally revised to specify an actual sensor/device use case.
+
+## Warehouse milestone evidence (7 October 2026)
+
+Inventory FR-14–FR-20 integration is supported by `docs/PREPARED_SHIPMENT_CONTRACT.md`, the warehouse feature, transactional Firestore writes/rules, and `scripts/warehouse-qa.mjs` (included in the QA suite). This demonstrates the prepared handover into Logistics FR-4. Access remains account-based; the shared role matrix is a planned contract, not implemented role authorisation.

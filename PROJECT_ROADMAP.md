@@ -1,5 +1,82 @@
 # IILAS Project Roadmap
 
+## Latest stock/location continuation — 10 October 2026
+
+Completed locally: quantity-based per-bin transfers/reservations, deterministic warehouse bin plans, exact cancellation/dispatch consumption, linked full manual reversals with independent review and safe correction retry. Legacy balances/IDs and original history/hashes are preserved. See [the current contract](docs/STOCK_LOCATIONS_CORRECTIONS_2026-10-10.md) for evidence and limits. Earlier pending stock-location/correction batches below are superseded for this scope.
+
+Next tasks:
+
+1. Wong: persist reorder requirements and stock-risk review/source-to-purchase links; add product/report filters and auditable verification exception review.
+2. Choong: pre-dispatch evidence stages/permissions and contextual history/preview; persist abnormality rules/points/thresholds and calculation history.
+3. Choong/shared: transport distance/ETA/map support, fleet editing and assignment visibility, restricted customer evidence/location access.
+4. Shared: indexed query pagination and larger-volume load checks; supervisor, real staff and real-phone GPS acceptance.
+5. Release/research: reviewed backups and combined deployment acceptance preserving main inventory; labelled datasets/images, held-out model/baseline evaluation, authenticated inference and both browser-wallet workflows.
+
+Continue input-by-input validation and real scenario tests in each batch. Production deployment and full module completion remain pending.
+
+## Completed continuation and next batches — 10 October 2026
+
+Completed locally: supplier edits/status and identity duplicate protection; independent rejection with remarks; correction/resubmission/revisions; unissued cancellation; unique purchase references; atomic partial/full deliveries with unique notes; immutable history and receipt links; status/supplier/date/search filters and pagination. Shared validation rejects numeric/text coercion, malformed phones/packing/names/envelopes. Build/lint, original/shared/account/stock regressions, 113 procurement boundaries, 159 shared-input checks, 111 procurement emulator checks and 77 browser checks are recorded in [the continuation contract](docs/PROCUREMENT_VALIDATION_2026-10-10.md). No production change or final research evaluation occurred.
+
+Next work, in order:
+
+1. Wong: linked stock corrections and quantity-based multi-location balances/transfers, including reserved-stock, role, stale-edit, duplicate/retry and atomic rollback scenarios.
+2. Wong: persisted reorder review/source-to-purchase links and evaluated stock-risk context; product/report filters and verification exception review.
+3. Choong: pre-dispatch evidence/stage permissions, contextual history/preview and persisted abnormality points/rules/thresholds; delivery/report validation and filters.
+4. Choong/shared: route/distance/ETA, vehicle/driver edit and assignment visibility, customer-restricted evidence/location access.
+5. Shared: larger-volume indexed query pagination, supervisor/real staff/phone-GPS acceptance; reviewed short-shipment close-out/returns if added to scope.
+6. Release/research: backups and retained initial Admin inventory, combined-release acceptance, labelled datasets/images and baseline/held-out evaluation, authenticated inference and browser-wallet evidence.
+
+Apply input-by-input validation and documented real scenarios in each batch. Earlier date-labelled plans below are retained for history and superseded by this order.
+
+## Latest continuation and next implementation — 9 October 2026
+
+Source recheck adds two procurement checks to the next batch: reject inactive (not only archived) products on the backend, and define/enforce purchase-reference uniqueness without blocking legitimate repeated stock references for partial receipts. When implementing saved abnormality scoring, consolidate the unused backend helper with corrected terminal-state rules. See the latest section of docs/MODULE_COMPLETION_AUDIT_2026-10-09.md.
+
+Completed locally: Issued-order count, Delivered/Returned time-alert closure, manual stock retry receipts and browser recovery/outcome checks. Build/lint, deterministic checks, stock-retry emulator tests, both original Firebase regressions, shared/account QA and responsive browser checks passed. See [continuation review](docs/CONTINUATION_REVIEW_2026-10-09.md) for evidence and limits. Production data was not migrated or deployed.
+
+Next batch: supplier editing and purchase rejection with remarks, correction/resubmission, cancellation UI and order filters. Then complete multi-location/correction/reorder/report contracts, pre-dispatch evidence and abnormality scoring, followed by transport/fleet/customer requirements. Production acceptance and real-data model/wallet evidence remain; data collection may proceed alongside implementation. This order supersedes the earlier recommendation to deploy before closing newly audited functional gaps.
+
+## Detailed module audit — 9 October 2026
+
+See [MODULE_COMPLETION_AUDIT_2026-10-09.md](docs/MODULE_COMPLETION_AUDIT_2026-10-09.md). Reviewing the current source against both portfolios found incomplete requirements: stock-risk/reorder linkage, quantity-based transfers/corrections, purchase rejection/supplier editing, pre-dispatch evidence, abnormality scoring, reporting filters and restricted customer access. Core local tests do not establish full module completion. The three concrete defects are fixed by the continuation above; close remaining feature gaps alongside data collection and production preparation.
+
+## Latest dashboard and next task — 9 October 2026
+
+The authorised UI uses the saved prototype's navy blue/purple palette and eight-card dashboard layout. The green workflow-first layout is superseded. See docs/UI_UX_THEME_2026-10-09.md for live-data meanings, browser evidence and the saved next-task plan.
+
+Next task: production readiness and combined-release acceptance. Verify choongkin6@gmail.com's email, backups, preserved main inventory IDs/balances, real staff roles, billing and runtime configuration. Deploy backend/rules/indexes/interface together after the required checks and record production approval/revocation and warehouse-to-dispatch acceptance. Do not merge other accounts' inventory automatically. Follow with supervisor usability, Firestore query pagination/bundle optimisation, restricted customer access, real-data AI evaluation and browser-wallet acceptance. These remain outstanding; the dashboard itself does not complete AI or blockchain research.
+
+## UI refinement — 8 October 2026
+
+The operational UI includes labelled responsive navigation, workflow counts/action links, module search, catalogue/stock/shipment/warehouse/account pagination and clearer approval/forms. See docs/UI_UX_REFINEMENT_2026-10-08.md. Next UI work is real staff/supervisor usability acceptance after production setup; larger datasets still need Firestore query pagination and workload testing.
+
+## Latest account design — 8 October 2026
+
+The approved direction is one shared system with Admin-reviewed staff accounts. Organisation creation, invitation codes and switching have been removed. choongkin6@gmail.com is the configured initial Admin/main record owner. Profile statuses are Pending, Approved, Rejected and Disabled; the backend/rules enforce active approved roles. Existing stock IDs and balances are retained. See docs/ACCOUNT_ACCESS_CONTRACT.md.
+
+Next: deploy the combined backend/rules/indexes/interface after checks, verify the existing Admin's email and retained data, approve real staff and test role/revocation behaviour. Review other accounts' old inventory before any merge. Existing real-data AI, inference, chain/browser acceptance and final report tasks below remain. Customer-specific restricted access remains pending; Viewer is a staff role.
+
+The organisation access plan in the earlier section below is superseded by this account design.
+
+## Current implementation and next work — 8 October 2026
+
+The project now targets the integrated final scope. One shared system, approved staff roles/revocation, trusted transactional commands, procurement, warehouse allocations/cancellation, transport/fleet, delivery/evidence, latest-position mapping and report/review interfaces are implemented locally. The existing hosted site is still the earlier release.
+
+Research training/inference code and local Solidity/Hardhat workflows exist. Final AI evaluation remains blocked by missing labelled datasets and parcel images, confirmed by the user. Synthetic tests are software evidence only. See docs/RELEASE_STATUS_2026-10-08.md for checks and limits, and research/README.md for data contracts.
+
+Next release tasks, in order:
+
+1. Review the fixed main inventory owner and approved staff roles; prepare backups and any explicitly reviewed migration of other accounts' stock.
+2. Configure Functions/Storage billing, service permissions, CORS and runtime secrets/endpoints; deploy backend/rules/indexes/interface together after all local checks pass, then run production acceptance.
+3. Collect and independently label inventory/delivery observations and Normal/Damaged parcel images, with provenance and leakage-free product/delivery/parcel splits.
+4. Train/evaluate both Random Forest modules and baselines, MobileNetV2/EfficientNetB0; record confusion matrices, precision/recall/F1, error analysis and model versions using actual held-out data.
+5. Install reviewed model artefacts, configure authenticated HTTPS inference, and perform staff-reviewed inference acceptance. Predictions must not approve orders or alter delivery statuses automatically.
+6. Retain the intended local Hardhat chain state, configure authorised wallet/network/registry access, and record browser signing, matching/mismatching verification and both students' assessment evidence.
+7. Complete supervisor usability/role acceptance and final FR-to-evidence/report reconciliation. Larger-volume pagination, multi-location inventory and a customer portal are future extensions, not claimed by current staff access.
+
+The sections below preserve the historical roadmap baseline and are superseded by this status for implemented modules and setup instructions.
+
 **Project:** Integrated Inventory and Logistics Administration System (IILAS)  
 **Systems:** Inventory Management and Logistics Management  
 **Roadmap baseline:** 7 October 2026  
@@ -100,7 +177,7 @@ The current application can be migrated toward this structure gradually. Refacto
 ### Planned
 
 - [~] Stock Management: operational movements and reservations are complete; Random Forest risk classification remains
-- [ ] Warehouse Operations and Prepared-Shipment Handover
+- [~] Warehouse Operations: picking, packing, atomic Prepared-Shipment Handover and audit are implemented; cancellation and automatic allocation remain
 - [ ] Replenishment & Procurement
 - [ ] Inventory Control & Reporting with blockchain verification
 - [ ] Transport Management
@@ -620,7 +697,7 @@ The current prototype is ready to demonstrate the following path:
 11. Archive the temporary product or delete a temporary Draft record.
 12. Open Firebase Console to demonstrate database persistence if requested.
 
-The demonstration can present Stock Management as implemented and emulator-tested. Warehouse Operations and Delivery Monitoring remain planned modules.
+The demonstration can present Stock Management as implemented and emulator-tested. Warehouse picking, packing, and the Prepared-Shipment Handover are implemented. Delivery Monitoring remains planned.
 
 ## 12. Risks and controls
 
@@ -656,7 +733,7 @@ A feature is complete when:
 
 1. Commit the current working prototype as a baseline release.
 2. Finalise shared roles, IDs, evidence metadata, and the Prepared-Shipment Handover contract.
-3. Implement Warehouse Operations and the Prepared-Shipment Handover workflow.
+3. Extend Warehouse Operations with cancellation and shipment-bound reservations; keep the tested Prepared-Shipment Handover contract intact.
 4. Design the inventory-risk, delivery-risk, and parcel-image datasets before writing model code.
 5. Implement delivery evidence upload and GPS/map records needed by the logistics AI and blockchain flows.
 6. Build and evaluate the required Random Forest and MobileNetV2 models against their baselines.
@@ -672,3 +749,5 @@ A feature is complete when:
 |---|---|
 | 7 October 2026 | Created the full-project roadmap from the implemented prototype, requirements, and QA evidence. |
 | 7 October 2026 | Reviewed both supplied Google Drive folders and promoted the documented AI, computer-vision, GPS/map, and blockchain functions into the P1 final scope. |
+
+| 7 October 2026 | Implemented account-owned Warehouse Operations and atomic Prepared-Shipment Handover; stage, concurrency, tampering, ownership, and dispatch regression tests added. Role enforcement remains pending. |

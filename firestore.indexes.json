@@ -1,0 +1,9 @@
+{
+  "indexes": [
+    {"collectionGroup":"stockMovements","queryScope":"COLLECTION","fields":[{"fieldPath":"ownerId","order":"ASCENDING"},{"fieldPath":"productId","order":"ASCENDING"}]},
+    {"collectionGroup":"deliveryEvents","queryScope":"COLLECTION","fields":[{"fieldPath":"ownerId","order":"ASCENDING"},{"fieldPath":"shipmentId","order":"ASCENDING"}]}
+  ],
+  "fieldOverrides": [
+    {"collectionGroup":"products","fieldPath":"imageDataUrl","indexes":[]}
+  ]
+}

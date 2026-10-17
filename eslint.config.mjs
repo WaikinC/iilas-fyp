@@ -12,7 +12,18 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "backend/functions/node_modules/**",
+    "backend/functions/validation.js",
+    "backend/functions/procurementValidation.js", "backend/functions/locationStock.js",
+    "outputs/**",
+    "output/**",
+    "blockchain/artifacts/**",
+    "blockchain/cache/**",
   ]),
+  {
+    files: ["hardhat.config.cjs", "blockchain/**/*.cjs"],
+    rules: {"@typescript-eslint/no-require-imports":"off"},
+  },
   {
     files: ["components/ui/**/*.{ts,tsx}", "hooks/use-mobile.ts"],
     rules: {

@@ -1,271 +1,54 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
+    // users/{uid}: server-managed identity, role, status, active, version.
+    // system/config: fixed dataScopeId and primaryAdminUid. Operational ownerId
+    // retains the selected inventory owner's UID. All writes use trusted commands.
     function signedIn() { return request.auth != null; }
-    function ownsRecord() { return signedIn() && resource.data.ownerId == request.auth.uid; }
-    function writesOwnRecord() {
-      return signedIn() && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.updatedBy == request.auth.uid;
+    function approved() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'Approved'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
     }
-    function productPath(id) { return /databases/$(database)/documents/products/$(id); }
-    function shipmentPath(id) { return /databases/$(database)/documents/shipments/$(id); }
-    function movementPath(id) { return /databases/$(database)/documents/stockMovements/$(id); }
-    function keyPath(id) { return /databases/$(database)/documents/uniqueKeys/$(id); }
-    function logPath(id) { return /databases/$(database)/documents/auditLogs/$(id); }
-
-    function keyFor(key, kind, id) {
-      let saved = getAfter(keyPath(key));
-      return saved != null && saved.data.ownerId == request.auth.uid
-        && saved.data.kind == kind && saved.data.recordId == id;
+    function admin() { return approved() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin'; }
+    function shared(data) { return approved() && data.ownerId == get(/databases/$(database)/documents/system/config).data.dataScopeId; }
+    match /users/{uid} {
+      allow get: if signedIn() && (uid == request.auth.uid || admin());
+      allow list: if admin();
+      allow write: if false;
     }
-    function auditFor(eventId, kind, id, version) {
-      let saved = getAfter(logPath(eventId));
-      return saved != null && saved.data.ownerId == request.auth.uid
-        && saved.data.actor == request.auth.uid && saved.data.kind == kind
-        && saved.data.recordId == id && saved.data.version == version
-        && saved.data.at == request.time;
+    match /system/{id} {
+      allow get: if id == 'config' && approved();
+      allow list, write: if false;
     }
-    function validProduct(data) {
-      let image = data.get('imageDataUrl', '');
-      return data.keys().hasAll(['name','sku','barcode','category','location','status','reorderLevel','quantityOnHand','reservedQuantity','version','ownerId','updatedBy','createdAt','updatedAt','lastEventId'])
-        && data.keys().hasOnly(['name','sku','barcode','category','location','status','reorderLevel','quantityOnHand','reservedQuantity','imageDataUrl','archived','lastShipmentId','lastStockMovementId','version','ownerId','updatedBy','createdAt','updatedAt','lastEventId'])
-        && data.name is string && data.name.size() > 0 && data.name.size() <= 120
-        && data.sku is string && data.sku.matches('^[A-Z0-9][A-Z0-9_-]{2,39}$')
-        && data.barcode is string && data.barcode.matches('^[0-9]{8,14}$')
-        && data.category is string && data.category.size() > 0 && data.category.size() <= 60
-        && data.location is string && data.location.size() > 0 && data.location.size() <= 80
-        && data.status in ['Active','Inactive']
-        && data.reorderLevel is int && data.reorderLevel >= 0 && data.reorderLevel <= 1000000
-        && data.quantityOnHand is int && data.quantityOnHand >= 0 && data.quantityOnHand <= 1000000
-        && data.reservedQuantity is int && data.reservedQuantity >= 0 && data.reservedQuantity <= data.quantityOnHand
-        && data.get('archived', false) is bool
-        && image is string && image.size() <= 300000
-        && (image == '' || image.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$'))
-        && data.updatedAt == request.time;
+    // stockRequests/{sha256(scope,actor,operationId)}: immutable server-only
+    // commandHash, state (Completed/Cancelled), result and createdAt. The receipt
+    // commits atomically with a manual movement or its pending adjustment.
+    match /stockRequests/{id} {
+      allow read, write: if false;
     }
-    function productKeys(data, id) {
-      return keyFor(request.auth.uid + '_sku_' + data.sku, 'products', id)
-        && keyFor(request.auth.uid + '_barcode_' + data.barcode, 'products', id);
+    // procurementKeys: private supplier/purchase/delivery-note uniqueness locks;
+    // ownerId, kind, recordId and optional eventId. Only command transactions write.
+    match /procurementKeys/{id} {
+      allow read, write: if false;
     }
-    function validOneItem(item, dispatching) {
-      let before = get(productPath(item.productId));
-      let after = getAfter(productPath(item.productId));
-      return item is map && item.keys().hasAll(['productId','quantity','name','sku'])
-        && item.keys().hasOnly(['productId','quantity','name','sku'])
-        && item.productId is string && item.productId.matches('^[a-f0-9-]{36}$')
-        && item.quantity is int && item.quantity >= 1 && item.quantity <= 10000
-        && before != null && before.data.ownerId == request.auth.uid
-        && before.data.status == 'Active'
-        && item.name == before.data.name && item.sku == before.data.sku
-        && (!dispatching || (after != null
-          && before.data.quantityOnHand - before.data.get('reservedQuantity', 0) >= item.quantity
-          && after.data.quantityOnHand == before.data.quantityOnHand - item.quantity
-          && after.data.reservedQuantity == before.data.get('reservedQuantity', 0)
-          && after.data.version == before.data.version + 1));
+    // purchaseOrderEvents: immutable order snapshots keyed by orderId_version;
+    // scoped ownerId, orderId, step, actor/name/role, at, notes, receiptReference, movements,
+    // version and validated quantities/cents. Approved staff may read history.
+    match /purchaseOrderEvents/{id} {
+      allow read: if shared(resource.data);
+      allow write: if false;
     }
-    function validItem(items, i, dispatching) {
-      return i >= items.size() || validOneItem(items[i], dispatching);
+    // stockCorrectionLinks/{originalMovementId}: server-controlled full-reversal
+    // claim with scoped ownerId, productId, approvalId, status and movementId.
+    match /stockCorrectionLinks/{id} {
+      allow read: if shared(resource.data);
+      allow write: if false;
     }
-    function distinctItems(items) {
-      return items.size() < 2 || items[0].productId != items[1].productId;
-    }
-    function validShipment(data) {
-      let dispatching = data.status == 'Dispatched';
-      return data.keys().hasAll(['reference','recipient','phone','address','handoverReference','driver','status','expectedDelivery','parcelCount','packed','items','dispatchedAt','version','ownerId','updatedBy','createdAt','updatedAt','lastEventId'])
-        && data.keys().hasOnly(['reference','recipient','phone','address','handoverReference','driver','status','expectedDelivery','parcelCount','packed','items','dispatchedAt','version','ownerId','updatedBy','createdAt','updatedAt','lastEventId'])
-        && data.reference is string && data.reference.matches('^[A-Z0-9][A-Z0-9_-]{2,39}$')
-        && data.recipient is string && data.recipient.size() > 0 && data.recipient.size() <= 120
-        && data.phone is string && data.phone.matches('^\\+?[0-9 ()-]{8,20}$')
-        && data.address is string && data.address.size() >= 10 && data.address.size() <= 500
-        && data.handoverReference is string && data.handoverReference.size() <= 80
-        && data.driver is string && data.driver.size() <= 120
-        && data.expectedDelivery is string && data.expectedDelivery.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-        && data.parcelCount is int && data.parcelCount >= 1 && data.parcelCount <= 10000
-        && data.packed is bool && data.status in ['Draft','Prepared','Dispatched']
-        && (data.status == 'Draft' || (data.packed && data.handoverReference.size() > 0))
-        && (!dispatching || data.driver.size() > 0)
-        && (dispatching ? data.dispatchedAt == request.time : data.dispatchedAt == null)
-        && data.items is list && data.items.size() >= 1 && data.items.size() <= 2
-        && distinctItems(data.items)
-        && validItem(data.items,0,dispatching) && validItem(data.items,1,dispatching)
-        && data.updatedAt == request.time;
-    }
-    function validStockMovement(data, movementId) {
-      let before = get(productPath(data.productId));
-      let after = getAfter(productPath(data.productId));
-      return data.keys().hasAll(['ownerId','productId','productName','sku','type','quantity','quantityChange','reservedChange','quantityBefore','quantityAfter','reservedBefore','reservedAfter','locationFrom','locationTo','reference','reason','actor','createdAt','productVersion'])
-        && data.keys().hasOnly(['ownerId','productId','productName','sku','type','quantity','quantityChange','reservedChange','quantityBefore','quantityAfter','reservedBefore','reservedAfter','locationFrom','locationTo','reference','reason','actor','createdAt','productVersion'])
-        && data.ownerId == request.auth.uid && data.actor == request.auth.uid
-        && data.productId is string && data.productId.matches('^[a-f0-9-]{36}$')
-        && data.productName is string && data.productName.size() > 0 && data.productName.size() <= 120
-        && data.sku is string && data.sku.matches('^[A-Z0-9][A-Z0-9_-]{2,39}$')
-        && data.type in ['Receipt','Issue','Adjustment','Reservation','Release','Transfer']
-        && data.quantity is int && data.quantity >= 1 && data.quantity <= 1000000
-        && data.quantityChange is int && data.reservedChange is int
-        && data.quantityBefore is int && data.quantityAfter is int
-        && data.reservedBefore is int && data.reservedAfter is int
-        && data.locationFrom is string && data.locationFrom.size() > 0 && data.locationFrom.size() <= 80
-        && data.locationTo is string && data.locationTo.size() > 0 && data.locationTo.size() <= 80
-        && data.reference is string && data.reference.size() <= 80
-        && data.reason is string && data.reason.size() >= 3 && data.reason.size() <= 240
-        && data.createdAt == request.time && data.productVersion is int
-        && before != null && before.data.ownerId == request.auth.uid
-        && before.data.status == 'Active' && before.data.get('archived', false) == false
-        && after != null && after.data.ownerId == request.auth.uid
-        && data.productName == before.data.name && data.sku == before.data.sku
-        && data.quantityBefore == before.data.quantityOnHand
-        && data.reservedBefore == before.data.get('reservedQuantity', 0)
-        && data.quantityAfter == after.data.quantityOnHand
-        && data.reservedAfter == after.data.reservedQuantity
-        && data.locationFrom == before.data.location && data.locationTo == after.data.location
-        && after.data.version == before.data.version + 1
-        && data.productVersion == after.data.version
-        && after.data.lastStockMovementId == movementId
-        && after.data.lastEventId == 'stock_' + movementId
-        && ((data.type == 'Receipt' && data.quantityChange == data.quantity && data.reservedChange == 0 && data.locationTo == data.locationFrom)
-          || (data.type == 'Issue' && data.quantityChange == 0 - data.quantity && data.reservedChange == 0 && data.locationTo == data.locationFrom)
-          || (data.type == 'Adjustment' && (data.quantityChange == data.quantity || data.quantityChange == 0 - data.quantity) && data.reservedChange == 0 && data.locationTo == data.locationFrom)
-          || (data.type == 'Reservation' && data.quantityChange == 0 && data.reservedChange == data.quantity && data.locationTo == data.locationFrom)
-          || (data.type == 'Release' && data.quantityChange == 0 && data.reservedChange == 0 - data.quantity && data.locationTo == data.locationFrom)
-          || (data.type == 'Transfer' && data.quantity == data.quantityBefore && data.quantityChange == 0 && data.reservedChange == 0 && data.locationTo != data.locationFrom))
-        && data.quantityAfter == data.quantityBefore + data.quantityChange
-        && data.reservedAfter == data.reservedBefore + data.reservedChange
-        && data.quantityAfter >= 0 && data.quantityAfter <= 1000000
-        && data.reservedAfter >= 0 && data.reservedAfter <= data.quantityAfter;
-    }
-    function stockMovementMatchesProduct(movementId, productId) {
-      let movement = getAfter(movementPath(movementId));
-      return movement != null && movement.data.ownerId == request.auth.uid
-        && movement.data.productId == productId
-        && movement.data.productVersion == request.resource.data.version
-        && movement.data.quantityAfter == request.resource.data.quantityOnHand
-        && movement.data.reservedAfter == request.resource.data.reservedQuantity
-        && movement.data.locationTo == request.resource.data.location;
-    }
-
-    match /products/{productId} {
-      allow get, list: if ownsRecord();
-      allow delete: if false;
-      allow create: if writesOwnRecord() && validProduct(request.resource.data)
-        && request.resource.data.version == 1
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.get('archived', false) == false
-        && request.resource.data.lastEventId == 'products_' + productId + '_1'
-        && productKeys(request.resource.data,productId)
-        && auditFor(request.resource.data.lastEventId,'products',productId,1);
-      allow update: if ownsRecord() && writesOwnRecord() && validProduct(request.resource.data)
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.version == resource.data.version + 1
-        && productKeys(request.resource.data,productId)
-        && auditFor(request.resource.data.lastEventId,'products',productId,request.resource.data.version)
-        && ((request.resource.data.lastEventId.matches('^products_' + productId + '_[0-9]+$')
-            && request.resource.data.quantityOnHand == resource.data.quantityOnHand
-            && request.resource.data.reservedQuantity == resource.data.get('reservedQuantity', 0)
-            && request.resource.data.location == resource.data.location
-            && request.resource.data.get('lastStockMovementId', null) == resource.data.get('lastStockMovementId', null))
-          || (request.resource.data.get('lastShipmentId', null) is string
-            && request.resource.data.lastEventId == 'product_' + productId + '_dispatch_' + request.resource.data.lastShipmentId
-            && request.resource.data.reservedQuantity == resource.data.get('reservedQuantity', 0)
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantityOnHand','reservedQuantity','version','updatedAt','updatedBy','lastEventId','lastShipmentId'])
-            && existsAfter(shipmentPath(request.resource.data.lastShipmentId))
-            && getAfter(shipmentPath(request.resource.data.lastShipmentId)).data.status == 'Dispatched'
-            && getAfter(shipmentPath(request.resource.data.lastShipmentId)).data.ownerId == request.auth.uid)
-          || (request.resource.data.get('lastStockMovementId', null) is string
-            && request.resource.data.lastEventId == 'stock_' + request.resource.data.lastStockMovementId
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantityOnHand','reservedQuantity','location','version','updatedAt','updatedBy','lastEventId','lastStockMovementId'])
-            && stockMovementMatchesProduct(request.resource.data.lastStockMovementId, productId)));
-    }
-
-    match /stockMovements/{movementId} {
-      allow get, list: if ownsRecord();
-      allow create: if signedIn() && validStockMovement(request.resource.data, movementId);
-      allow update, delete: if false;
-    }
-
-    match /shipments/{shipmentId} {
-      allow get, list: if ownsRecord();
-      allow create: if writesOwnRecord() && validShipment(request.resource.data)
-        && request.resource.data.version == 1 && request.resource.data.createdAt == request.time
-        && request.resource.data.lastEventId == 'shipments_' + shipmentId + '_1'
-        && keyFor(request.auth.uid + '_shipment_' + request.resource.data.reference,'shipments',shipmentId)
-        && auditFor(request.resource.data.lastEventId,'shipments',shipmentId,1);
-      allow update: if ownsRecord() && writesOwnRecord() && resource.data.status != 'Dispatched'
-        && validShipment(request.resource.data)
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.version == resource.data.version + 1
-        && request.resource.data.lastEventId.matches('^shipments_' + shipmentId + '_[0-9]+$')
-        && keyFor(request.auth.uid + '_shipment_' + request.resource.data.reference,'shipments',shipmentId)
-        && auditFor(request.resource.data.lastEventId,'shipments',shipmentId,request.resource.data.version);
-      allow delete: if ownsRecord() && resource.data.status == 'Draft'
-        && auditFor('shipments_' + shipmentId + '_deleted','shipments',shipmentId,resource.data.version + 1);
-    }
-
-    match /uniqueKeys/{key} {
-      function ownKey() { return signedIn() && key.matches(request.auth.uid + '_.*'); }
-      function productTargetMatches(id) {
-        let saved = getAfter(productPath(id));
-        return saved != null && saved.data.ownerId == request.auth.uid
-          && (key == request.auth.uid + '_sku_' + saved.data.sku
-            || key == request.auth.uid + '_barcode_' + saved.data.barcode);
-      }
-      function shipmentTargetMatches(id) {
-        let saved = getAfter(shipmentPath(id));
-        return saved != null && saved.data.ownerId == request.auth.uid
-          && key == request.auth.uid + '_shipment_' + saved.data.reference;
-      }
-      function targetMatches() {
-        let target = request.resource.data;
-        return target.ownerId == request.auth.uid && target.recordId is string
-          && ((target.kind == 'products' && productTargetMatches(target.recordId))
-            || (target.kind == 'shipments' && shipmentTargetMatches(target.recordId)));
-      }
-      allow get: if ownKey();
-      allow create: if ownKey() && request.resource.data.keys().hasOnly(['ownerId','kind','recordId'])
-        && targetMatches();
-      allow update: if false;
-      allow delete: if ownKey() && resource.data.ownerId == request.auth.uid
-        && ((resource.data.kind == 'products' && existsAfter(productPath(resource.data.recordId))
-          && key != request.auth.uid + '_sku_' + getAfter(productPath(resource.data.recordId)).data.sku
-          && key != request.auth.uid + '_barcode_' + getAfter(productPath(resource.data.recordId)).data.barcode)
-          || (resource.data.kind == 'shipments'
-            && (!existsAfter(shipmentPath(resource.data.recordId))
-              || key != request.auth.uid + '_shipment_' + getAfter(shipmentPath(resource.data.recordId)).data.reference)));
-    }
-
-    match /auditLogs/{logId} {
-      function productEventMatches(data) {
-        let saved = getAfter(productPath(data.recordId));
-        return saved != null && saved.data.ownerId == request.auth.uid
-          && saved.data.lastEventId == logId && saved.data.version == data.version;
-      }
-      function shipmentEventMatches(data) {
-        let saved = getAfter(shipmentPath(data.recordId));
-        return saved != null && saved.data.ownerId == request.auth.uid
-          && saved.data.lastEventId == logId && saved.data.version == data.version;
-      }
-      function shipmentDeleteMatches(data) {
-        let saved = get(shipmentPath(data.recordId));
-        return saved != null && !existsAfter(shipmentPath(data.recordId))
-          && saved.data.ownerId == request.auth.uid && data.version == saved.data.version + 1;
-      }
-      allow get, list: if ownsRecord();
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['ownerId','kind','recordId','action','actor','at','version','label'])
-        && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.actor == request.auth.uid
-        && request.resource.data.at == request.time
-        && request.resource.data.version is int
-        && request.resource.data.label is string
-        && ((request.resource.data.kind == 'products'
-          && request.resource.data.action in ['Create','Update','Archive','Dispatch','Receipt','Issue','Adjustment','Reservation','Release','Transfer']
-          && productEventMatches(request.resource.data))
-          || (request.resource.data.kind == 'shipments'
-            && ((request.resource.data.action in ['Create','Update']
-              && shipmentEventMatches(request.resource.data))
-              || (request.resource.data.action == 'Delete'
-                && shipmentDeleteMatches(request.resource.data)))));
-      allow update, delete: if false;
+    match /{kind}/{id} {
+      allow read: if kind in ['products','shipments','stockMovements','warehouseHandovers','auditLogs','suppliers','vehicles','drivers','purchaseOrders','transportPlans','deliveries','deliveryEvents','locations','locationHistory','approvals','evidence','fleetEvents','predictions','verificationRecords','resourceAssignments','uniqueKeys'] && shared(resource.data);
+      allow write: if false;
     }
   }
 }

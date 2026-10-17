@@ -1,0 +1,134 @@
+// Disposable explicit-project emulators only. No production migration or data merge.
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {doc,getDoc,getDocs,collection,query,where,setDoc,updateDoc,deleteDoc} from 'firebase/firestore';
+import {admin,client,scope,suffix,barcode,fixtureDB,snapshot,close} from './access-test-client.mjs';
+import {malaysiaDay} from '../lib/procurementValidation.js';
+let checks=0,ordinal=20;
+const check=fn=>{fn();checks++;};
+const bad=async(fn,pattern)=>{await assert.rejects(fn,pattern);checks++;};
+const denied=fn=>bad(fn,e=>/permission-denied/.test(e.code));
+const inventory=await client('Inventory'),manager=await client('Manager'),warehouse=await client('Warehouse'),viewer=await client('Viewer'),logistics=await client('Logistics'),outsider=await client('Outsider',false);
+const product=async(name,quantityOnHand=10)=>inventory.call('save',{kind:'products',data:{name:`${name} ${suffix}`,sku:`PROC-${suffix}-${ordinal}`,barcode:barcode(ordinal++),category:'QA',location:'A-01',reorderLevel:3,quantityOnHand,reservedQuantity:0,status:'Active',imageDataUrl:''}});
+const p1=await product('Procurement pump'),p2=await product('Procurement valve');
+for(const malformed of [true,null,'',[],{}]){
+ await bad(()=>inventory.call('stock',{productId:p1.id,type:'Receipt',quantity:malformed,reference:'BAD-INPUT',reason:'Malformed quantity must not change stock'}),/Quantity/);
+ await bad(()=>inventory.call('save',{kind:'products',data:{name:'Invalid input',sku:`BAD-${suffix}`,barcode:barcode(90),category:'QA',location:'A-01',status:'Active',reorderLevel:0,quantityOnHand:malformed,reservedQuantity:0}}),/stock on hand/);
+}
+const supplier=await inventory.call('entity',{kind:'suppliers',data:{name:`Procurement supplier ${suffix}`,contact:'+60 (12) 345-6789'}});
+const supplierData=(await snapshot('suppliers',supplier.id));
+const editSupplier=async(status)=>{const current=await snapshot('suppliers',supplier.id);return inventory.call('entity',{kind:'suppliers',id:supplier.id,version:current.version,data:{name:current.name,contact:current.contact,status}});};
+await bad(()=>inventory.call('entity',{kind:'suppliers',data:{name:supplierData.name.toUpperCase(),contact:'60123456789'}}),/already registered/);
+await bad(()=>inventory.call('entity',{kind:'suppliers',data:{name:'Bad',contact:'not-email'}}),/email address/);
+await bad(()=>inventory.call('entity',{kind:'suppliers',data:{name:'Bad',contact:'b@example.test',status:'Approved'}}),/Active or Inactive/);
+await bad(()=>inventory.call('entity',{kind:'suppliers',id:randomUUID(),version:1,data:{name:'Missing',contact:'b@example.test'}}),/not found/);
+await bad(()=>inventory.call('entity',{kind:'suppliers',ownerId:outsider.uid,data:{name:'Forged',contact:'b@example.test'}}),/unsupported fields/);
+await editSupplier('Inactive');
+await bad(()=>inventory.call('entity',{kind:'suppliers',id:supplier.id,version:1,data:{name:supplierData.name,contact:supplierData.contact,status:'Active'}}),/changed/);
+const details={supplierId:supplier.id,expectedDate:malaysiaDay(),items:[{productId:p1.id,quantity:5,unitCost:12.5},{productId:p2.id,quantity:3,unitCost:0}]};
+let serial=0;
+const create=(c=inventory,extra={})=>c.call('purchaseOrder',{...details,reference:`PROC-${suffix}-${++serial}`,...extra});
+await bad(()=>create(),/active supplier/);await editSupplier('Active');
+for(const c of [warehouse,viewer,logistics,outsider])await denied(()=>create(c));
+const foreign=await product('Foreign marker');await fixtureDB.doc(`products/${foreign.id}`).update({ownerId:outsider.uid});
+await bad(()=>create(inventory,{items:[{productId:foreign.id,quantity:1,unitCost:1}]}),/not found/);
+await fixtureDB.doc(`products/${p2.id}`).update({status:'Inactive'});
+await bad(()=>create(),/active product/);
+await fixtureDB.doc(`products/${p2.id}`).update({status:'Active',archived:true});await bad(()=>create(),/active product/);
+await fixtureDB.doc(`products/${p2.id}`).update({archived:false});
+for(const quantity of [true,null,'',-1,1.5])await bad(()=>create(inventory,{items:[{productId:p1.id,quantity,unitCost:1}]}),/quantity/);
+await bad(()=>create(inventory,{items:[{productId:p1.id,quantity:1,unitCost:1.001}]}),/decimal/);
+await bad(()=>create(inventory,{status:'Approved'}),/unsupported fields/);
+const concurrentRef=`RACE-${suffix}`;
+const duplicate=await Promise.allSettled([create(inventory,{reference:concurrentRef}),create(inventory,{reference:concurrentRef.toLowerCase()})]);
+check(()=>assert.equal(duplicate.filter(r=>r.status==='fulfilled').length,1));
+check(()=>assert.match(duplicate.find(r=>r.status==='rejected').reason.message,/already registered/));
+const legacyId=`legacy_${suffix}`,legacyRef=`  LEGACY-${suffix.toLowerCase()}  `;
+await fixtureDB.doc(`purchaseOrders/${legacyId}`).set({...details,reference:legacyRef,supplierName:supplierData.name,items:details.items.map(i=>({...i,name:'Legacy product',received:0})),ownerId:scope,requestedBy:inventory.uid,status:'Submitted',version:1});
+await bad(()=>create(inventory,{reference:`legacy-${suffix}`}),/already registered/);
+await manager.call('purchaseOrder',{id:legacyId,version:1,step:'Approve',notes:'Legacy balance and reference preserved'});
+const legacySaved=(await fixtureDB.doc(`purchaseOrders/${legacyId}`).get()).data();check(()=>assert.equal(legacySaved.reference,legacyRef));
+const po=await create(manager);let current=await snapshot('purchaseOrders',po.id);
+check(()=>assert.equal(current.totalCents,6250));
+await bad(()=>manager.call('purchaseOrder',{id:po.id,version:1,step:'Approve',notes:'Self approval attempt'}),/different manager/);
+await bad(()=>manager.call('purchaseOrder',{id:po.id,version:1,step:'Reject',notes:'Self rejection attempt'}),/different manager/);
+await bad(()=>admin.call('purchaseOrder',{id:po.id,version:1,step:'Reject',notes:' '}),/Action notes/);
+await admin.call('purchaseOrder',{id:po.id,version:1,step:'Reject',notes:'Revise quantities and price'});
+await bad(()=>inventory.call('purchaseOrder',{id:po.id,version:1,step:'Cancel',notes:'Stale cancellation'}),/changed/);
+await inventory.call('purchaseOrder',{...details,id:po.id,version:2,step:'Resubmit',notes:'Quantity and supplier checked',items:[{productId:p1.id,quantity:6,unitCost:12.55},{productId:p2.id,quantity:3,unitCost:0}]});
+current=await snapshot('purchaseOrders',po.id);
+check(()=>{assert.equal(current.revision,2);assert.equal(current.requestedBy,inventory.uid);assert.equal(current.totalCents,7530);assert.equal(current.approvedBy,null);});
+await editSupplier('Inactive');await bad(()=>manager.call('purchaseOrder',{id:po.id,version:3,step:'Approve',notes:'Independent check'}),/Reactivate/);await editSupplier('Active');
+await fixtureDB.doc(`products/${p1.id}`).update({status:'Inactive'});await bad(()=>manager.call('purchaseOrder',{id:po.id,version:3,step:'Approve',notes:'Independent check'}),/inactive products/);await fixtureDB.doc(`products/${p1.id}`).update({status:'Active'});
+await denied(()=>inventory.call('purchaseOrder',{id:po.id,version:3,step:'Approve',notes:'Unauthorised approval'}));
+await manager.call('purchaseOrder',{id:po.id,version:3,step:'Approve',notes:'Supplier, free goods and quantities reviewed'});
+await bad(()=>inventory.call('purchaseOrder',{...details,id:po.id,version:4,step:'Resubmit',notes:'After approval'}),/Only submitted/);
+await editSupplier('Inactive');await bad(()=>inventory.call('purchaseOrder',{id:po.id,version:4,step:'Issue'}),/Reactivate/);await editSupplier('Active');
+await inventory.call('purchaseOrder',{id:po.id,version:4,step:'Issue'});
+await bad(()=>inventory.call('purchaseOrder',{id:po.id,version:5,step:'Cancel',notes:'Already issued'}),/unissued/);
+const receive=(version,quantities,receiptReference='DN-001',c=warehouse)=>c.call('purchaseOrder',{id:po.id,version,step:'Receive',quantities,receiptReference,notes:'Goods physically counted and accepted'});
+await bad(()=>receive(5,[0,0]),/at least one/);
+await bad(()=>receive(5,[1]),/every line/);
+await bad(()=>receive(5,[7,0]),/received quantity/);
+await bad(()=>receive(5,[1,0],''),/Delivery note/);
+await denied(()=>receive(5,[1,0],'DN-VIEWER',viewer));
+await fixtureDB.doc(`products/${p2.id}`).update({quantityOnHand:1000000,locationBalances:[{location:'A-01',quantity:1000000,reserved:0,warehouse:0}]});
+await bad(()=>receive(5,[1,1],'DN-CAPACITY'),/stock balance/);
+let productSaved=await snapshot('products',p1.id);check(()=>assert.equal(productSaved.quantityOnHand,10));
+await fixtureDB.doc(`products/${p2.id}`).update({quantityOnHand:10,locationBalances:[{location:'A-01',quantity:10,reserved:0,warehouse:0}]});
+await fixtureDB.doc(`products/${p1.id}`).update({status:'Inactive'});await bad(()=>receive(5,[1,0]),/Reactivate the received product/);await fixtureDB.doc(`products/${p1.id}`).update({status:'Active'});
+await editSupplier('Inactive'); // Already-issued goods remain receivable.
+await receive(5,[2,0]);
+current=await snapshot('purchaseOrders',po.id);check(()=>{assert.equal(current.status,'PartReceived');assert.deepEqual(current.items.map(i=>i.received),[2,0]);});
+await bad(()=>receive(6,[1,0],'dn-001'),/already received/);
+await bad(()=>receive(5,[1,0],'DN-STALE'),/changed/);
+const receipts=await Promise.allSettled([receive(6,[1,1],'DN-002'),receive(6,[1,1],'DN-003')]);
+check(()=>assert.equal(receipts.filter(r=>r.status==='fulfilled').length,1));
+check(()=>assert.match(receipts.find(r=>r.status==='rejected').reason.message,/changed/));
+await receive(7,[3,2],'DN-FINAL');
+current=await snapshot('purchaseOrders',po.id);check(()=>{assert.equal(current.status,'Received');assert.deepEqual(current.items.map(i=>i.received),[6,3]);});
+productSaved=await snapshot('products',p1.id);check(()=>assert.equal(productSaved.quantityOnHand,16));
+productSaved=await snapshot('products',p2.id);check(()=>assert.equal(productSaved.quantityOnHand,13));
+await bad(()=>receive(8,[1,0],'DN-LATE'),/Only issued/);
+await bad(()=>inventory.call('purchaseOrder',{...details,id:po.id,version:8,step:'Resubmit',notes:'Locked completed order'}),/Only submitted/);
+const history=(await getDocs(query(collection(viewer.db,'purchaseOrderEvents'),where('ownerId','==',scope)))).docs.filter(d=>d.data().orderId===po.id).map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.version-b.version);
+check(()=>assert.deepEqual(history.map(e=>e.step),['Submit','Reject','Resubmit','Approve','Issue','Receive','Receive','Receive']));
+check(()=>{assert.equal(history[0].totalCents,6250);assert.equal(history[2].totalCents,7530);assert.equal(history[1].notes,'Revise quantities and price');});
+check(()=>{assert.equal(history[0].actor,manager.uid);assert.equal(history[0].actorRole,'Manager');assert.equal(history[0].actorName,'QA Manager');});
+for(const event of history.filter(e=>e.step==='Receive'))for(const movement of event.movements){const saved=await snapshot('stockMovements',movement.movementId);check(()=>{assert.equal(saved.purchaseOrderId,po.id);assert.equal(saved.purchaseReceiptId,event.id);assert.equal(saved.quantity,movement.quantity);});}
+await editSupplier('Active');
+// A manager who corrects somebody else's submission becomes its requester too.
+const managerRevision=await create();await manager.call('purchaseOrder',{...details,id:managerRevision.id,version:1,step:'Resubmit',notes:'Manager corrected supplier quantities'});
+await bad(()=>manager.call('purchaseOrder',{id:managerRevision.id,version:2,step:'Approve',notes:'Cannot approve own correction'}),/different manager/);
+await admin.call('purchaseOrder',{id:managerRevision.id,version:2,step:'Approve',notes:'Another administrator reviewed revision'});
+// Legacy imported identifiers retain their ID and balance through receipt.
+const legacyProductId=`legacy_product_${suffix}`;await fixtureDB.doc(`products/${legacyProductId}`).set({ownerId:scope,name:'Legacy imported pump',sku:`LEGACY-${suffix}`,barcode:barcode(91),category:'QA',location:'L-01',reorderLevel:0,quantityOnHand:17,reservedQuantity:0,status:'Active',version:1});
+const legacyPurchase=await create(inventory,{items:[{productId:legacyProductId,quantity:2,unitCost:1}]});
+await manager.call('purchaseOrder',{id:legacyPurchase.id,version:1,step:'Approve',notes:'Retain legacy product identity'});await inventory.call('purchaseOrder',{id:legacyPurchase.id,version:2,step:'Issue'});await warehouse.call('purchaseOrder',{id:legacyPurchase.id,version:3,step:'Receive',quantities:[2],receiptReference:'LEGACY-DN'});
+const legacyProductSaved=await snapshot('products',legacyProductId);check(()=>{assert.equal(legacyProductSaved.id,legacyProductId);assert.equal(legacyProductSaved.quantityOnHand,19);});
+for(const status of ['Submitted','Rejected','Approved']){
+ const cancelled=await create();let version=1;
+ if(status!=='Submitted'){await manager.call('purchaseOrder',{id:cancelled.id,version,step:status==='Approved'?'Approve':'Reject',notes:'Independent review'});version++;}
+ await inventory.call('purchaseOrder',{id:cancelled.id,version,step:'Cancel',notes:'Supplier no longer needed'});
+ const saved=await snapshot('purchaseOrders',cancelled.id);check(()=>assert.equal(saved.status,'Cancelled'));
+ await bad(()=>create(inventory,{reference:saved.reference.toLowerCase()}),/already registered/);
+ await bad(()=>inventory.call('purchaseOrder',{...details,id:saved.id,version:saved.version,step:'Resubmit',notes:'Reuse cancelled order'}),/Only submitted/);
+}
+const key=(await fixtureDB.collection('procurementKeys').where('ownerId','==',scope).get()).docs[0].id,eventId=history[0].id;
+for(const c of [admin,viewer,outsider]){
+ await denied(()=>getDoc(doc(c.db,'procurementKeys',key)));
+ await denied(()=>getDocs(query(collection(c.db,'procurementKeys'),where('ownerId','==',scope))));
+ await denied(()=>setDoc(doc(c.db,'procurementKeys',`${suffix}-${c.uid}`),{ownerId:scope}));
+ await denied(()=>updateDoc(doc(c.db,'procurementKeys',key),{recordId:'forged'}));
+ await denied(()=>deleteDoc(doc(c.db,'procurementKeys',key)));
+ await denied(()=>setDoc(doc(c.db,'purchaseOrderEvents',`forged-${c.uid}`),{ownerId:scope}));
+ await denied(()=>updateDoc(doc(c.db,'purchaseOrderEvents',eventId),{status:'Approved'}));
+ await denied(()=>deleteDoc(doc(c.db,'purchaseOrderEvents',eventId)));
+}
+await denied(()=>getDoc(doc(outsider.db,'purchaseOrderEvents',eventId)));
+const foreignEvent=`foreign_${suffix}`;await fixtureDB.doc(`purchaseOrderEvents/${foreignEvent}`).set({ownerId:outsider.uid});await denied(()=>getDoc(doc(viewer.db,'purchaseOrderEvents',foreignEvent)));
+const revoked=await client('Inventory');const revokedProfile=await snapshot('users',revoked.uid);await admin.call('updateAccount',{uid:revoked.uid,version:revokedProfile.version,step:'Disable'});await denied(()=>create(revoked));
+await mkdir(new URL('../outputs/',import.meta.url),{recursive:true});
+await writeFile(new URL('../outputs/procurement-browser-fixtures.json',import.meta.url),JSON.stringify({emulatorOnly:true,scope,suffix,supplierId:supplier.id,products:[p1.id,p2.id],accounts:Object.fromEntries(Object.entries({Admin:admin,Inventory:inventory,Manager:manager,Warehouse:warehouse,Viewer:viewer}).map(([role,c])=>[role,{email:c.email,uid:c.uid}])),password:'LocalTestPassword123!'},null,2));
+await close();console.log(`Procurement emulator QA passed: ${checks} workflow, role, race, atomic stock, legacy-reference, immutable-history and private-key checks.`);

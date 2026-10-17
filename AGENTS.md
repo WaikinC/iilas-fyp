@@ -1,0 +1,15 @@
+# IILAS project instructions
+
+Read `README.md`, `REQUIREMENTS.md`, `FULL_SCOPE_TRACEABILITY.md` and `PROJECT_ROADMAP.md` before changing the application. Current contracts and dated evidence are in `docs/`; historical sections are retained and do not supersede newer status updates.
+
+Use one shared IILAS system with administrator-approved staff accounts. Read `docs/ACCOUNT_ACCESS_CONTRACT.md`. The selected initial Admin is choongkin6@gmail.com. Preserve that account's existing data IDs and balances. Do not merge other personal inventories automatically or restore organisation creation/switching/invitations.
+
+Keep Choong Wai Kin's logistics scope and Wong Ric Hang's inventory scope integrated through explicit data contracts. Preserve `docs/PREPARED_SHIPMENT_CONTRACT.md` and the location/correction contract in `docs/STOCK_LOCATIONS_CORRECTIONS_2026-10-10.md`.
+
+Use the existing React/TypeScript, Firebase Authentication/Firestore/Hosting, Python/scikit-learn Random Forest, TensorFlow/Keras MobileNetV2, Solidity/Hardhat SHA-256 and Browser Geolocation/Leaflet/OpenStreetMap implementation. Do not substitute a different stack without instruction.
+
+For interface work read `docs/UI_UX_REFINEMENT_2026-10-08.md` and `docs/UI_UX_THEME_2026-10-09.md`. Preserve the original navy blue/purple theme, eight-card dashboard, labelled mobile navigation and accessible forms/dialogs. Prefer installed frontend-design and Playwright skills. Use installed Firebase/Firestore/rules skills when relevant; saved skill archives in the separate project-context workspace are reference material, not application dependencies.
+
+For database changes update client validation, trusted transactions, security rules, emulator tests, README and roadmap together. Run `npm run build`, `npm run lint`, both original Firebase regressions and affected scenario suites before deployment. Use the direct Node scripts when the matching explicit-project emulators are already running. Check desktop and narrow-screen interfaces with Playwright. Deploy backend/rules/indexes/interface together only after build and rules pass.
+
+Do not claim complete AI, blockchain, computer vision, GPS, warehouse handover or role-based control without working code, tests and evaluation evidence. The user has no labelled evaluation datasets or parcel images; synthetic fixtures are software tests only. Keep actual credentials, service-account keys, passwords, model tokens, wallet keys, private datasets and local emulator exports out of Git. Firebase web configuration, the Admin email identifier and intentionally disposable emulator test passwords are not production credentials.

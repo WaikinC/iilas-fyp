@@ -7,6 +7,9 @@ import "../app/dashboard.css";
 import "../app/products.css";
 import "../app/improvements.css";
 import "./features/stock/stock.css";
+import "./features/warehouse/warehouse.css";
+import './features/operations/operations.css';
+import '../app/interface.css';
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

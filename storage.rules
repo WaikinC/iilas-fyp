@@ -1,0 +1,28 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function approved(scope) {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'Approved'
+        && firestore.get(/databases/(default)/documents/system/config).data.dataScopeId == scope;
+    }
+    function deliveryRole(scope) { return approved(scope) && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['Admin','Manager','Logistics','Driver']; }
+    function assigned(shipment) {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role != 'Driver'
+        || firestore.get(/databases/(default)/documents/transportPlans/$(shipment)).data.driverUid == request.auth.uid;
+    }
+    match /evidence/{scope}/{shipment}/{fileId} {
+      allow read: if approved(scope);
+      allow create: if deliveryRole(scope) && assigned(shipment) && resource == null
+        && !firestore.exists(/databases/(default)/documents/evidence/$(fileId))
+        && firestore.get(/databases/(default)/documents/shipments/$(shipment)).data.ownerId == scope
+        && firestore.get(/databases/(default)/documents/shipments/$(shipment)).data.status == 'Dispatched'
+        && request.resource.size > 0 && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('^(image/(jpeg|png|webp)|application/pdf)$')
+        && request.resource.metadata.actor == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}

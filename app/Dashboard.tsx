@@ -1,65 +1,92 @@
-import { Activity, ArrowRight, Box, CheckCircle, ClipboardList, Package, Truck } from "lucide-react";
+import { useEffect, useState, type ReactNode } from 'react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { Activity, AlertTriangle, ArrowRight, ArrowUpRight, Camera, Clock, Navigation, Package, ShieldAlert, ShoppingCart, Truck } from 'lucide-react';
+import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { db } from '../lib/firebase';
+import { dashboardSummary, inventoryTrend, timestampMillis, type DashboardRecords, type DashboardRow as Row } from '../src/features/dashboard/dashboardData';
 
-type Row = { id: string; [key: string]: unknown };
-type Props = {
-  products: Row[];
-  shipments: Row[];
-  activities: Row[];
-  onNavigate: (tab: "dashboard" | "products" | "stock" | "shipments", productFilter?: "all" | "lowStock") => void;
-};
+type Destination = 'dashboard' | 'products' | 'stock' | 'warehouse' | 'shipments' | 'procurement' | 'transport' | 'delivery' | 'reports';
+type Props = { products: Row[]; shipments: Row[]; movements: Row[]; activities: Row[]; scope: string; role: string; uid: string; onNavigate: (tab: Destination, filter?: 'all' | 'lowStock') => void };
+type Kind = keyof DashboardRecords;
+const collections: Record<Kind, string> = { purchases: 'purchaseOrders', deliveries: 'deliveries', predictions: 'predictions', evidence: 'evidence', verifications: 'verificationRecords' };
+const label = (value: unknown) => typeof value === 'string' ? value : '';
+const date = (value: unknown) => timestampMillis(value) ? new Date(timestampMillis(value)).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Saving…';
+const statusColours: Record<string, string> = { Delivered: '#16a34a', Active: '#1b3b6f', Delayed: '#d97706', Failed: '#dc2626', Returned: '#6d28d9' };
 
-const label = (value: unknown) => typeof value === "string" ? value : "";
-const date = (value: unknown) => {
-  const seconds = value && typeof value === "object" && "seconds" in value ? Number(value.seconds) : NaN;
-  return Number.isFinite(seconds) ? new Date(seconds * 1000).toLocaleString() : "Just now";
-};
+function useDashboardRecords(scope: string) {
+  const [records, setRecords] = useState<DashboardRecords>({ purchases: [], deliveries: [], predictions: [], evidence: [], verifications: [] });
+  const [loaded, setLoaded] = useState<Partial<Record<Kind, boolean>>>({});
+  const [errors, setErrors] = useState<Partial<Record<Kind, string>>>({});
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!db) return;
+    const store = db;
+    const unsubscribe = (Object.entries(collections) as [Kind, string][]).map(([kind, name]) => onSnapshot(
+      query(collection(store, name), where('ownerId', '==', scope)),
+      snapshot => { setRecords(previous => ({ ...previous, [kind]: snapshot.docs.map(d => ({ id: d.id, ...d.data() })) })); setLoaded(previous => ({ ...previous, [kind]: true })); setErrors(previous => { const next = { ...previous }; delete next[kind]; return next; }); },
+      error => setErrors(previous => ({ ...previous, [kind]: error.message }))
+    ));
+    return () => unsubscribe.forEach(stop => stop());
+  }, [scope, attempt]);
+  return { records, errors, ready: (...kinds: Kind[]) => kinds.every(kind => loaded[kind] && !errors[kind]), retry: () => { setLoaded({}); setErrors({}); setAttempt(value => value + 1); } };
+}
 
-export default function Dashboard({ products, shipments, activities, onNavigate }: Props) {
-  const active = products.filter(p => p.status === "Active").length;
-  const lowStock = products.filter(p => p.status === "Active" && Number(p.quantityOnHand ?? 0) - Number(p.reservedQuantity ?? 0) <= Number(p.reorderLevel ?? 0)).length;
-  const draft = shipments.filter(s => s.status === "Draft").length;
-  const prepared = shipments.filter(s => s.status === "Prepared").length;
-  const dispatched = shipments.filter(s => s.status === "Dispatched").length;
-  const categoryCounts = Object.entries(products.reduce<Record<string, number>>((result, product) => {
-    const category = label(product.category) || "Uncategorised";
-    result[category] = (result[category] || 0) + 1;
-    return result;
-  }, {})).sort((a, b) => b[1] - a[1]);
-  const largestCategory = categoryCounts[0]?.[1] || 1;
-  const shipmentStages = [
-    { name: "Draft", count: draft, color: "#94a3b8" },
-    { name: "Prepared", count: prepared, color: "#16a34a" },
-    { name: "Dispatched", count: dispatched, color: "#1b3b6f" },
+export default function Dashboard({ products, shipments, movements, activities, scope, role, uid, onNavigate }: Props) {
+  const data = useDashboardRecords(scope);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(timer); }, []);
+  const visibleShipments = role === 'Driver' ? shipments.filter(s => s.driverUid === uid) : shipments;
+  const visibleEvidence = role === 'Driver' ? data.records.evidence.filter(e => visibleShipments.some(s => s.id === e.shipmentId)) : data.records.evidence;
+  const summary = dashboardSummary(products, visibleShipments, { ...data.records, evidence: visibleEvidence }, now);
+  const trend = inventoryTrend(movements, now);
+  const hasMovements = trend.some(row => row.stockIn || row.stockOut);
+  const statuses = Object.entries(summary.statusCounts).map(([name, value]) => ({ name, value, color: statusColours[name] }));
+  const deliveryReady = data.ready('deliveries');
+  const riskReady = data.ready('deliveries', 'predictions');
+  const parcelReady = data.ready('predictions', 'evidence');
+  const verificationReady = data.ready('predictions', 'evidence', 'verifications');
+  const alerts = [
+    ...summary.lowStock.slice(0, 2).map(p => ({ id: `stock-${p.id}`, text: `${label(p.name)} has reached its reorder level.`, detail: `${Number(p.quantityOnHand ?? 0) - Number(p.reservedQuantity ?? 0)} available · reorder at ${Number(p.reorderLevel ?? 0)}`, tone: 'amber', open: () => onNavigate('products', 'lowStock') })),
+    ...(riskReady ? summary.highRisk.slice(0, 1).map(p => ({ id: p.id, text: `${label(visibleShipments.find(s => s.id === p.recordId)?.reference)} has a saved high-risk prediction.`, detail: `${Math.round(Number(p.confidence) * 100)}% model confidence · ${label(p.reviewStatus)} review`, tone: 'red', open: () => onNavigate('reports') })) : []),
+    ...(parcelReady ? summary.damageAlerts.slice(0, 1).map(p => ({ id: p.id, text: 'Possible parcel damage recorded for human review.', detail: `${Math.round(Number(p.confidence) * 100)}% model confidence · ${label(p.reviewStatus)} review`, tone: 'red', open: () => onNavigate('reports') })) : []),
+    ...(verificationReady && summary.pendingVerification.length ? [{ id: 'verification', text: `${summary.pendingVerification.length} evidence records await blockchain registration.`, detail: 'Proofs of delivery and accepted damage results', tone: 'purple', open: () => onNavigate('reports') }] : []),
   ];
-  const recent = activities.slice(0, 5);
-
-  return <div className="dashboard">
-      <div className="dashboard-heading"><div><h1>Dashboard</h1><p>Live overview of your inventory and dispatch records</p></div></div>
-    <div className="dashboard-stats">
-      <Stat icon={<Package size={19}/>} value={products.length} title="Total products" detail={`${active} active`} color="navy" onClick={() => onNavigate("products")}/>
-      <Stat icon={<Box size={19}/>} value={lowStock} title="At or below reorder level" detail="Available stock to replenish" color="amber" onClick={() => onNavigate("stock")}/>
-      <Stat icon={<ClipboardList size={19}/>} value={draft + prepared} title="Pending shipments" detail={`${prepared} prepared for dispatch`} color="amber" onClick={() => onNavigate("shipments")}/>
-      <Stat icon={<Truck size={19}/>} value={dispatched} title="Dispatched records" detail="Completed dispatch handovers" color="navy" onClick={() => onNavigate("shipments")}/>
+  const links: { name: string; tab: Destination; tone: string }[] = [
+    { name: 'Product Management', tab: 'products', tone: 'blue' }, { name: 'Stock Management', tab: 'stock', tone: 'blue' },
+    { name: 'Warehouse Operations', tab: 'warehouse', tone: 'blue' }, { name: 'Order & Dispatch', tab: 'shipments', tone: 'purple' },
+    { name: 'Delivery Monitoring', tab: 'delivery', tone: 'purple' }, { name: 'Reporting & Verification', tab: 'reports', tone: 'purple' },
+  ];
+  return <div className="dashboard prototype-dashboard">
+    <header className="page-heading"><div><h1>Dashboard</h1><p>{role === 'Driver' ? 'Shared inventory and your assigned deliveries.' : 'Your shared inventory and logistics overview.'}</p></div><button className="secondary-button" onClick={() => onNavigate('reports')}>View reports <ArrowUpRight size={16}/></button></header>
+    {Object.keys(data.errors).length > 0 && <div className="dashboard-load-error" role="alert"><span>Some dashboard records could not be loaded. Unavailable counts are shown as —.</span><button className="secondary-button" onClick={data.retry}>Retry dashboard</button></div>}
+    <div className="prototype-stats" aria-label="Inventory and logistics summaries">
+      <Stat icon={<Package size={19}/>} value={products.length} title="Total products" detail={`${summary.activeProducts.length} active products`} tone="blue" onClick={() => onNavigate('products')}/>
+      <Stat icon={<AlertTriangle size={19}/>} value={summary.lowStock.length} title="Low-stock items" detail="At or below reorder level" tone="amber" onClick={() => onNavigate('products', 'lowStock')}/>
+      <Stat icon={<ShoppingCart size={19}/>} value={data.ready('purchases') ? summary.pendingPurchases.length : null} title="Pending purchase orders" detail="Awaiting approval or receipt" tone="blue" onClick={() => onNavigate('procurement')}/>
+      <Stat icon={<Truck size={19}/>} value={summary.prepared.length} title="Prepared shipments" detail="Warehouse handover complete" tone="purple" onClick={() => onNavigate('shipments')}/>
+      <Stat icon={<Navigation size={19}/>} value={deliveryReady ? summary.activeDeliveries.length : null} title="Active deliveries" detail={role === 'Driver' ? 'Your dispatched, unfinished jobs' : 'Dispatched, not delivered or returned'} tone="blue" onClick={() => onNavigate('delivery')}/>
+      <Stat icon={<ShieldAlert size={19}/>} value={riskReady && summary.currentDeliveryPredictions.length ? summary.highRisk.length : null} title="High-risk deliveries" detail={!riskReady ? 'Loading saved risk results…' : summary.currentDeliveryPredictions.length ? `${summary.currentDeliveryPredictions.length} active deliveries analysed` : 'No current saved risk predictions'} tone="red" onClick={() => onNavigate('reports')}/>
+      <Stat icon={<Camera size={19}/>} value={parcelReady && summary.currentParcelPredictions.length ? summary.damageAlerts.length : null} title="Damage alerts" detail={!parcelReady ? 'Loading saved parcel results…' : summary.currentParcelPredictions.length ? `${summary.damageAlerts.filter(p => p.reviewStatus === 'Pending').length} awaiting human review` : 'No current saved parcel predictions'} tone="red" onClick={() => onNavigate('reports')}/>
+      <Stat icon={<Clock size={19}/>} value={verificationReady ? summary.pendingVerification.length : null} title="Evidence awaiting verification" detail="Proofs and accepted damage results" tone="purple" onClick={() => onNavigate('reports')}/>
     </div>
-
-    <div className="dashboard-chart-grid">
-      <section className="dashboard-panel"><div className="dashboard-panel-heading"><div><h2>Products by category</h2><p>Current catalogue breakdown</p></div><button onClick={() => onNavigate("products")}>View products <ArrowRight size={14}/></button></div>
-        {categoryCounts.length ? <div className="category-chart">{categoryCounts.slice(0, 6).map(([name, count]) => <div className="category-row" key={name}><span title={name}>{name}</span><div className="category-track"><div style={{width:`${count / largestCategory * 100}%`}}/></div><b>{count}</b></div>)}{categoryCounts.length > 6 && <p className="chart-footnote">+ {categoryCounts.length - 6} more categories</p>}</div> : <Empty text="Add products to see the category breakdown."/>}
+    <div className="prototype-charts">
+      <section className="dashboard-panel trend-panel"><div className="dashboard-panel-heading"><div><h2>Inventory level trend</h2><p>Recorded stock-in vs stock-out · last 6 months</p></div><button onClick={() => onNavigate('stock')}>View movements <ArrowRight size={14}/></button></div>
+        {hasMovements ? <div className="dashboard-chart"><ResponsiveContainer width="100%" height={230} minWidth={0}><AreaChart data={trend} margin={{ top: 10, right: 8, left: -15, bottom: 0 }} accessibilityLayer><defs><linearGradient id="stock-in-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#1b3b6f" stopOpacity={0.2}/><stop offset="95%" stopColor="#1b3b6f" stopOpacity={0}/></linearGradient><linearGradient id="stock-out-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6d28d9" stopOpacity={0.16}/><stop offset="95%" stopColor="#6d28d9" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="#e2e6ed"/><XAxis dataKey="month" tick={{ fontSize: 11, fill: '#626b7c' }}/><YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#626b7c' }}/><Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #dde1ea' }}/><Area type="monotone" dataKey="stockIn" name="Stock in" stroke="#1b3b6f" strokeWidth={2} fill="url(#stock-in-fill)" isAnimationActive={false}/><Area type="monotone" dataKey="stockOut" name="Stock out" stroke="#6d28d9" strokeWidth={2} fill="url(#stock-out-fill)" isAnimationActive={false}/></AreaChart></ResponsiveContainer></div> : <div className="dashboard-chart-empty"><Package size={28}/><p>No receipts or issues recorded in these six months.</p><button onClick={() => onNavigate('stock')}>Open Stock Management</button></div>}
+        <div className="chart-key"><span><i style={{ background: '#1b3b6f' }}/>Stock in</span><span><i style={{ background: '#6d28d9' }}/>Stock out</span></div>
+        <details className="chart-values"><summary>View monthly chart values</summary><div className="table-wrap" role="region" aria-label="Monthly stock flow" tabIndex={0}><table><thead><tr><th scope="col">Month</th><th scope="col">Stock in</th><th scope="col">Stock out</th></tr></thead><tbody>{trend.map(row => <tr key={row.key}><th scope="row">{row.month}</th><td>{row.stockIn.toLocaleString()}</td><td>{row.stockOut.toLocaleString()}</td></tr>)}</tbody></table></div></details>
       </section>
-      <section className="dashboard-panel"><div className="dashboard-panel-heading"><div><h2>Shipment status</h2><p>{shipments.length} saved shipment records</p></div></div>
-        <div className="shipment-summary"><div className="shipment-number">{shipments.length}<small>Total shipments</small></div><div className="shipment-status-bar">{shipmentStages.map(stage => stage.count > 0 && <div key={stage.name} style={{width:`${stage.count / shipments.length * 100}%`,background:stage.color}} title={`${stage.name}: ${stage.count}`}/>)}</div><div className="shipment-legend">{shipmentStages.map(stage => <div key={stage.name}><i style={{background:stage.color}}/><span>{stage.name}</span><b>{stage.count}</b></div>)}</div></div>
+      <section className="dashboard-panel"><div className="dashboard-panel-heading"><div><h2>Delivery status</h2><p>{deliveryReady ? `${summary.dispatchedCount} dispatched shipments · all stored records` : 'Loading delivery records…'}</p></div></div>
+        {deliveryReady && summary.dispatchedCount > 0 ? <div className="dashboard-chart"><ResponsiveContainer width="100%" height={170} minWidth={0}><PieChart accessibilityLayer><Pie data={statuses.filter(s => s.value)} innerRadius={49} outerRadius={73} dataKey="value" paddingAngle={3} isAnimationActive={false}>{statuses.filter(s => s.value).map(status => <Cell key={status.name} fill={status.color}/>)}</Pie><Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }}/></PieChart></ResponsiveContainer></div> : <div className="delivery-chart-empty"><Truck size={28}/><p>{deliveryReady ? 'Delivery progress appears after dispatch.' : 'Waiting for delivery records.'}</p></div>}
+        <ul className="delivery-legend" aria-label="Delivery status counts">{statuses.map(status => <li key={status.name}><span><i style={{ background: status.color }}/>{status.name === 'Failed' ? 'Attempt failed' : status.name}</span><b>{deliveryReady ? status.value : '—'}</b></li>)}</ul><p className="chart-footnote">Delayed means the expected delivery date has passed. Returned deliveries are closed.</p>
       </section>
     </div>
-
-    <div className="dashboard-bottom-grid">
-      <section className="dashboard-panel"><div className="dashboard-panel-heading"><div><h2>Needs attention</h2><p>Based on current records</p></div></div><div className="attention-list"><div><span className="attention-dot amber"/><p><b>{lowStock} products at reorder level</b><small>Review stock on hand</small></p></div><div><span className="attention-dot amber"/><p><b>{draft} draft shipments</b><small>Complete preparation and assign a driver</small></p></div><div><span className="attention-dot green"/><p><b>{prepared} prepared shipments</b><small>Ready to review for dispatch</small></p></div></div></section>
-      <section className="dashboard-panel"><div className="dashboard-panel-heading"><div><h2>Recent activity</h2><p>Changes saved in Firestore</p></div><Activity size={16}/></div>{recent.length ? <div className="activity-list">{recent.map(item => <div key={item.id}><CheckCircle size={15}/><p><b>{label(item.action)} {label(item.kind) === "products" ? "product" : "shipment"}: {label(item.label)}</b><small>{date(item.at)}</small></p></div>)}</div> : <Empty text="Create a product or shipment to see activity."/>}</section>
-      <section className="dashboard-panel"><div className="dashboard-panel-heading"><div><h2>Quick links</h2><p>Open a working module</p></div></div><div className="dashboard-links"><button onClick={() => onNavigate("products")}><span><Package size={17}/>Product Management</span><ArrowRight size={15}/></button><button onClick={() => onNavigate("stock")}><span><Box size={17}/>Stock Management</span><ArrowRight size={15}/></button><button onClick={() => onNavigate("shipments")}><span><Truck size={17}/>Order & Dispatch</span><ArrowRight size={15}/></button></div></section>
+    <div className="prototype-bottom">
+      <section className="dashboard-panel"><div className="dashboard-panel-heading"><div><h2>Recent alerts</h2><p>Saved results and current stock checks</p></div><AlertTriangle size={17}/></div><div className="dashboard-alerts">{alerts.length ? alerts.slice(0, 4).map(alert => <button className={`dashboard-alert ${alert.tone}`} key={alert.id} onClick={alert.open}><AlertTriangle size={15}/><span><b>{alert.text}</b><small>{alert.detail}</small></span><ArrowRight size={14}/></button>) : <p className="dashboard-empty">No stock alerts or saved analysis alerts to review.</p>}</div><p className="chart-footnote">Risk and parcel cards show saved predictions. The dashboard does not run analysis.</p></section>
+      <section className="dashboard-panel"><div className="dashboard-panel-heading"><div><h2>Recent activity</h2><p>Latest changes across the shared system</p></div><Activity size={17}/></div>{activities.length ? <ul className="prototype-activity">{activities.slice(0, 4).map(item => <li key={item.id}><span className="event-icon"><Activity size={14}/></span><div><b>{label(item.label) || `${label(item.action)} record`}</b><small><span className={['evidence', 'verificationRecords', 'predictions'].includes(label(item.kind)) ? 'activity-kind purple' : 'activity-kind blue'}>{label(item.action)}</span><time>{date(item.at)}</time></small></div></li>)}</ul> : <p className="dashboard-empty">Saved operational changes will appear here.</p>}</section>
+      <section className="dashboard-panel"><div className="dashboard-panel-heading"><div><h2>Quick links</h2><p>Continue work in your modules</p></div></div><div className="dashboard-quick-links">{links.map(link => <button key={link.tab} className={link.tone} onClick={() => onNavigate(link.tab)}>{link.name}<ArrowRight size={14}/></button>)}</div></section>
     </div>
   </div>;
 }
-
-function Stat({icon,value,title,detail,color,onClick}:{icon:React.ReactNode;value:number;title:string;detail:string;color:string;onClick:()=>void}) {
-  return <button className={`dashboard-stat ${color}`} onClick={onClick}><span className="stat-icon">{icon}</span><b>{value.toLocaleString()}</b><span>{title}</span><small>{detail}</small></button>;
+function Stat({ icon, value, title, detail, tone, onClick }: { icon: ReactNode; value: number | null; title: string; detail: string; tone: string; onClick: () => void }) {
+  return <button className={`prototype-stat ${tone}`} onClick={onClick}><span className="prototype-stat-top"><span className="prototype-stat-icon">{icon}</span><ArrowUpRight size={14}/></span><span className="prototype-stat-value">{value === null ? '—' : value.toLocaleString()}</span><span className="prototype-stat-title">{title}</span><small>{detail}</small></button>;
 }
-function Empty({text}:{text:string}) { return <p className="dashboard-empty">{text}</p>; }

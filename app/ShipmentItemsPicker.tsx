@@ -5,7 +5,7 @@ export type Item = { productId: string; quantity: number; name?: string; sku?: s
 type Product = { id: string; [key: string]: unknown };
 type Props = { products: Product[]; items: Item[]; onChange: (items: Item[]) => void; locked: boolean };
 const string = (value: unknown) => typeof value === "string" ? value : "";
-const MAX_ITEMS = 2;
+const MAX_ITEMS = 100;
 
 export default function ShipmentItemsPicker({ products, items, onChange, locked }: Props) {
   const [search, setSearch] = useState("");
@@ -21,7 +21,7 @@ export default function ShipmentItemsPicker({ products, items, onChange, locked 
   };
   return <div className="shipment-picker wide">
     <div className="shipment-picker-heading"><b>Inventory products</b><small>Choose products from Product Management. Stock is deducted when dispatched.</small></div>
-    {!locked && <><div className="shipment-product-search"><Search size={15}/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search product name, SKU, barcode or category" aria-label="Search inventory products"/></div>{items.length >= MAX_ITEMS && <p className="shipment-limit-note" role="status">2 of 2 products selected. Remove an item to choose another product.</p>}<div className="shipment-search-results">{matches.map(product => {
+    {!locked && <><div className="shipment-product-search"><Search size={15}/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search product name, SKU, barcode or category" aria-label="Search inventory products"/></div>{items.length >= MAX_ITEMS && <p className="shipment-limit-note" role="status">{MAX_ITEMS} products selected. Remove an item to choose another product.</p>}<div className="shipment-search-results">{matches.map(product => {
       const available = Math.max(0, Number(product.quantityOnHand ?? 0) - Number(product.reservedQuantity ?? 0));
       const disabled = product.status !== "Active" || product.archived === true || available < 1 || items.length >= MAX_ITEMS;
       return <button type="button" key={product.id} disabled={disabled} onClick={() => add(product)}><span className="picker-product-image">{string(product.imageDataUrl) ? <img src={string(product.imageDataUrl)} alt=""/> : <Package size={17}/>}</span><span className="picker-product-label"><b>{string(product.name)}</b><small>{string(product.sku)} · {string(product.category)} · {product.status !== "Active" ? "Inactive" : `${available} available`}</small></span><Plus size={16}/></button>;
