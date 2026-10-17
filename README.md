@@ -1,8 +1,16 @@
 # IILAS — Integrated Inventory & Logistics System
 
+## Private repository and credential handling — 17 October 2026
+
+The owner requested private visibility and removal of the Google/Firebase web API key from Git. The repository is private, and `firebase-config.json` is removed from all rewritten Git history and ignored locally. The original local configuration is preserved. Use the blank `firebase-config.example.json` when setting up a clone. `npm run dev` and `npm run build` prepare a blank ignored configuration only when absent; fill it locally before signing in. Never commit live keys, private environments, service-account credentials or generated bundles.
+
+Run `npm run security:install-hooks` once per clone to enable staged-file and full reachable-history checks before commits/pushes. `npm run security:scan`, `npm run security:history` and `npm run test:secrets` provide manual verification. The guards include Google API key patterns and private configuration paths and print redacted findings. They supplement review rather than detect every possible secret. Read [the credential review](docs/GITHUB_SECURITY_2026-10-17.md) and [setup instructions](docs/GITHUB_SETUP.md), including the history-rewrite/reclone note.
+
+Firebase web configuration is visible in the built browser application by design. Keeping it out of Git does not turn a browser key into a server secret. Firebase Authentication, rules, key restrictions and applicable App Check controls protect the services. Actual server tokens stay server-side. The Firebase deployment is unchanged.
+
 ## GitHub source and local setup
 
-[WaikinC/iilas-fyp](https://github.com/WaikinC/iilas-fyp) contains the combined final-year project by **Choong Wai Kin (logistics)** and **Wong Ric Hang (inventory)**. The repository is public. [Clone/setup and collaboration instructions](docs/GITHUB_SETUP.md) describe the local Firebase emulators, example environment configuration and checks. Backend commands, rules, research workflows, Solidity contracts and documentation are included; private runtime configuration, data and generated outputs remain local.
+[WaikinC/iilas-fyp](https://github.com/WaikinC/iilas-fyp) contains the combined final-year project by **Choong Wai Kin (logistics)** and **Wong Ric Hang (inventory)**. The repository is private. [Clone/setup and collaboration instructions](docs/GITHUB_SETUP.md) describe the local Firebase emulators, example environment configuration and checks. Backend commands, rules, research workflows, Solidity contracts and documentation are included; private runtime configuration, data and generated outputs remain local.
 
 The implementation status and remaining work are recorded in [PROJECT_ROADMAP.md](PROJECT_ROADMAP.md). Publishing the source does not deploy the newer application, grant Firebase data access, or complete outstanding AI evaluation and browser-wallet acceptance. Dated verification records below retain their original test dates.
 
@@ -93,7 +101,7 @@ Use non-sensitive demonstration data for recipient names, phone numbers, and add
 - Cloud Firestore database, with account-owned records and transaction-backed uniqueness keys
 - Firebase Hosting
 
-The Firebase project is `fyp-inventory-and-logistics`. Public web-app configuration is in `firebase-config.json`; Firestore rules are in `firestore.rules`. Audit entries are written to `auditLogs`, and stock movement records are written to `stockMovements`. Warehouse jobs and completed handovers use `warehouseHandovers/{shipmentId}`; see `docs/PREPARED_SHIPMENT_CONTRACT.md` for the integration contract and planned role responsibilities.
+The Firebase project is `fyp-inventory-and-logistics`. Web-app configuration stays in ignored local `firebase-config.json` (copy the blank `firebase-config.example.json`); Firestore rules are in `firestore.rules`. Audit entries are written to `auditLogs`, and stock movement records are written to `stockMovements`. Warehouse jobs and completed handovers use `warehouseHandovers/{shipmentId}`; see `docs/PREPARED_SHIPMENT_CONTRACT.md` for the integration contract and planned role responsibilities.
 
 Product images are resized in the browser to a maximum of 512 pixels and stored as small JPEG data in the product's Firestore document. This keeps the prototype within its existing Firebase services; for a large production catalogue, object storage would be more suitable. Product quantities and locations are changed through Stock Management, while dispatch deducts from available stock. Reservations are explicit stock movements; draft shipments and warehouse work do not reserve automatically. Each warehouse step and dispatch rechecks availability. Stock can change between these steps; warehouse work may need replenishment before completion. The prototype has no warehouse cancellation flow.
 

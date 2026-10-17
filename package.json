@@ -32,7 +32,14 @@
     "test:procurement": "firebase emulators:exec --project fyp-inventory-and-logistics --only auth,firestore,functions,storage \"node scripts/procurement-qa.mjs\"",
     "test:input-validation": "node scripts/input-validation-qa.mjs",
     "test:location-stock": "node scripts/location-stock-qa.mjs",
-    "test:stock-locations": "firebase emulators:exec --project fyp-inventory-and-logistics --only auth,firestore,functions,storage \"node scripts/stock-locations-qa.mjs\""
+    "test:stock-locations": "firebase emulators:exec --project fyp-inventory-and-logistics --only auth,firestore,functions,storage \"node scripts/stock-locations-qa.mjs\"",
+    "config:prepare": "node scripts/prepare-firebase-config.mjs",
+    "predev": "npm run config:prepare",
+    "prebuild": "npm run config:prepare",
+    "security:scan": "node scripts/check-secrets.mjs",
+    "security:history": "node scripts/check-secrets.mjs --history",
+    "security:install-hooks": "git config --local core.hooksPath .githooks",
+    "test:secrets": "node scripts/check-secrets-qa.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
