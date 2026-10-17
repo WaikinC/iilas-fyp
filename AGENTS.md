@@ -2,6 +2,8 @@
 
 Read `README.md`, `REQUIREMENTS.md`, `FULL_SCOPE_TRACEABILITY.md` and `PROJECT_ROADMAP.md` before changing the application. Current contracts and dated evidence are in `docs/`; historical sections are retained and do not supersede newer status updates.
 
+Keep README.md focused on what IILAS does and how staff use it. Put developer setup, security reviews and implementation history in docs/. docs/PROJECT_STRUCTURE.md distinguishes the application checkout from the separate documentation archive. Use the active React/Vite config in vite.config.ts; do not restore removed OpenAI/ChatGPT/Sites hosting or Cloudflare/D1 examples.
+
 Use one shared IILAS system with administrator-approved staff accounts. Read `docs/ACCOUNT_ACCESS_CONTRACT.md`. The selected initial Admin is choongkin6@gmail.com. Preserve that account's existing data IDs and balances. Do not merge other personal inventories automatically or restore organisation creation/switching/invitations.
 
 Keep Choong Wai Kin's logistics scope and Wong Ric Hang's inventory scope integrated through explicit data contracts. Preserve `docs/PREPARED_SHIPMENT_CONTRACT.md` and the location/correction contract in `docs/STOCK_LOCATIONS_CORRECTIONS_2026-10-10.md`.

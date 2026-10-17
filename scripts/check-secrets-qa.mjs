@@ -24,6 +24,11 @@ try{
  result=scan('--history');assert.equal(result.status,1);assert.match(result.stderr,/Google API key/);assert.ok(!result.stderr.includes(fakeKey));checks++;
  mkdirSync(join(root,'backend'),{recursive:true});writeFileSync(join(root,'backend','service-account.json'),JSON.stringify({type:'service_account',private_key:'placeholder'}));git('add','backend/service-account.json');assert.equal(scan('--staged').status,1);checks++;
  git('reset','--quiet');writeFileSync(join(root,'trailing-hyphen.txt'),fakeKey.slice(0,-1)+'-');git('add','trailing-hyphen.txt');assert.equal(scan('--staged').status,1);checks++;
+ for(const prefix of ['sk','sk'+'-proj','sk'+'-svcacct']){
+  git('reset','--quiet');const fakeOpenAI=prefix+'-'+'Z'.repeat(48);
+  writeFileSync(join(root,'provider.txt'),fakeOpenAI);git('add','provider.txt');
+  result=scan('--staged');assert.equal(result.status,1);assert.match(result.stderr,/OpenAI API key/);assert.ok(!result.stderr.includes(fakeOpenAI));checks++;
+ }
  console.log(`Secret guard integration QA passed: ${checks} ignored/forced paths, safe examples, staged-vs-working content, redacted findings and sanitised-tip history scenarios.`);
  const configRoot=join(root,'config-fixture');mkdirSync(join(configRoot,'scripts'),{recursive:true});
  const prepare=join(configRoot,'scripts','prepare-firebase-config.mjs');

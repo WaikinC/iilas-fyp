@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 
 // Keep diagnostics redacted: report paths/rules, never a matched credential.
 const rules=[
+  ['OpenAI API key',/(?<![0-9A-Za-z_-])sk-(?:(?:proj|svcacct)-)?[0-9A-Za-z_-]{20,}(?![0-9A-Za-z_-])/g],
   ['Google API key',/(?<![0-9A-Za-z_-])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])/g],
   ['GitHub token',/\b(?:gh[pousr]_[0-9A-Za-z]{20,}|github_pat_[0-9A-Za-z_]{20,})\b/g],
   ['private key',/-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----/g],

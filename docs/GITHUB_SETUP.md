@@ -2,6 +2,8 @@
 
 The combined final-year project source is published at [WaikinC/iilas-fyp](https://github.com/WaikinC/iilas-fyp) as a private repository. It includes the React application, trusted Firebase backend and rules, Python research workflows, Solidity contracts, scenario scripts and current requirements/roadmap/contracts. Earlier commits were rewritten to remove the live Firebase configuration from every reachable commit. Existing clones should be replaced with a fresh clone; do not merge the old history back.
 
+The repository root is the working application's root, not the separate report/skills archive. See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the folder map and why dependencies, empty folders, private configuration and generated outputs are absent on GitHub. Development and builds use the standard React `vite.config.ts`; obsolete OpenAI/Cloudflare preview scaffolding is removed.
+
 ## Clone and run locally
 
 Use Node.js 22, npm and a supported Java installation for the Firebase emulators. Use the Python environment described in `research/README.md` for research work.
