@@ -70,11 +70,12 @@ await assert.rejects(()=>driver.call('location',{shipmentId:shipment.id,latitude
 await driver.call('location',{shipmentId:shipment.id,latitude:3.139,longitude:101.687,accuracy:8});
 assert.equal((await snapshot('locations',shipment.id)).actor,driver.uid);
 const evidenceId=randomUUID(),path=`evidence/${scope}/${shipment.id}/${evidenceId}`,bytes=new TextEncoder().encode('%PDF-1.4\nQA proof fixture\n%%EOF');
-await denied(()=>uploadBytes(ref(viewer.storage,path),bytes,{contentType:'application/pdf',customMetadata:{actor:viewer.uid}}));
-await uploadBytes(ref(driver.storage,path),bytes,{contentType:'application/pdf',customMetadata:{actor:driver.uid}});
-const proof=await driver.call('registerEvidence',{id:evidenceId,shipmentId:shipment.id,path,name:'proof.pdf',type:'Proof of Delivery'});
+const captureMetadata={stage:'Delivery',evidenceType:'Proof of Delivery',captureSource:'file',capturedAtClient:''};
+await denied(()=>uploadBytes(ref(viewer.storage,path),bytes,{contentType:'application/pdf',customMetadata:{actor:viewer.uid,...captureMetadata}}));
+await uploadBytes(ref(driver.storage,path),bytes,{contentType:'application/pdf',customMetadata:{actor:driver.uid,...captureMetadata}});
+const proof=await driver.call('registerEvidence',{id:evidenceId,shipmentId:shipment.id,path,name:'proof.pdf',type:'Proof of Delivery',stage:'Delivery',captureSource:'file',capturedAtClient:null});
 assert.equal(proof.sha256,createHash('sha256').update(bytes).digest('hex'));
-await denied(()=>uploadBytes(ref(driver.storage,path),bytes,{contentType:'application/pdf',customMetadata:{actor:driver.uid}}));
+await denied(()=>uploadBytes(ref(driver.storage,path),bytes,{contentType:'application/pdf',customMetadata:{actor:driver.uid,...captureMetadata}}));
 assert.equal((await getBytes(ref(viewer.storage,path))).byteLength,bytes.byteLength);
 await denied(()=>getBytes(ref(outsider.storage,path)));
 await driver.call('delivery',{shipmentId:shipment.id,version:1,status:'Delivered',notes:'Receiver acknowledged receipt',proofId:evidenceId});

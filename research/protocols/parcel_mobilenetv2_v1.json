@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "seed": 42,
+  "batch_size": 4,
+  "epochs": 10,
+  "patience": 3,
+  "learning_rate": 0.001,
+  "dropout": 0.2,
+  "architectures": [
+    "mobilenetv2",
+    "efficientnetb0"
+  ],
+  "contrasts": [
+    "none",
+    "clahe"
+  ],
+  "class_order": [
+    "Normal",
+    "Damaged"
+  ],
+  "preprocessing": "rgb-letterbox224-v1",
+  "selection": "macro_f1_desc-loss_asc-none_first",
+  "limits": {
+    "develop": {
+      "max_wall_seconds": 3900,
+      "max_fit_seconds": 900,
+      "max_rss_bytes": 2147483648,
+      "min_available_bytes": 3221225472,
+      "min_free_disk_bytes": 2147483648,
+      "max_output_bytes": 536870912,
+      "poll_seconds": 1.0,
+      "threads": 1,
+      "available_floor_bytes": 805306368
+    },
+    "test": {
+      "max_wall_seconds": 900,
+      "max_fit_seconds": 600,
+      "max_rss_bytes": 2147483648,
+      "min_available_bytes": 3221225472,
+      "min_free_disk_bytes": 2147483648,
+      "max_output_bytes": 268435456,
+      "poll_seconds": 1.0,
+      "threads": 1,
+      "available_floor_bytes": 805306368
+    }
+  },
+  "packages": {
+    "tensorflow": "2.21.0",
+    "keras": "3.15.1",
+    "h5py": "3.14.0",
+    "numpy": "2.4.2",
+    "opencv-python-headless": "4.14.0.94"
+  },
+  "weights": {
+    "mobilenetv2": {
+      "path": "",
+      "sha256": "",
+      "source": "",
+      "licence_evidence": ""
+    },
+    "efficientnetb0": {
+      "path": "",
+      "sha256": "",
+      "source": "",
+      "licence_evidence": ""
+    }
+  }
+}

@@ -1,5 +1,52 @@
 # IILAS Full-Scope Traceability
 
+## FR-10/FR-11 typed executor checkpoint — 22 October 2026
+
+The [new typed artifact branch](research/PARCEL_TYPED_TRANSPORT_VERIFICATION_2026-10-22.md) preserves the existing executor and original scientific evidence. All 132 affected checks pass; actual audit and cold inference succeed, with prediction at 22.942 seconds/500.43 MiB under unchanged limits and confirmed cleanup. This supersedes transport-pending statements below. Latency headroom and intended-use photo/live quality/device verification remain; both backend pins stay null and FR-10/FR-11 remain incomplete overall. No production or shared-workflow change occurred.
+
+## FR-10/FR-11 local inference checkpoint — 22 October 2026
+
+The [closed serving adapter](research/PARCEL_SERVING_READINESS_2026-10-22.md) and actual 7.902-second/461.93-MiB cold-photo proof now pass independent verification. This supersedes the batch-one/cold-path-pending statements below. Typed application integration, independent intended-use photo/live quality and integrated device verification remain; both operational pins are null and FR-10/FR-11 remain incomplete overall. No TEST rerun or model-selection change occurred.
+
+## FR-10/FR-11 source evaluation checkpoint — 22 October 2026
+
+The [verified source benchmark](research/PARCEL_SOURCE_TEST_EVALUATION_2026-10-22.md) records 90.67% primary MobileNetV2 accuracy and 92.00% comparator accuracy on the fixed 75-view admitted cohort, with damage metrics, uncertainty and all 102 original dispositions retained. No serving acceptance follows. Batch-one compatibility, bounded photo inference and intended-use photo/live quality/device evidence remain core outstanding work; both operational pins remain null. This supersedes earlier test-unscored snapshots without changing shared workflows or production.
+
+## FR-10/FR-11 corrected GPU development checkpoint — 21 October 2026
+
+Both corrected GPU fits and their saved-model/raw/native/statistical checks now pass. [Development validation](research/PARCEL_GPU_DEVELOPMENT_2026-10-21.md) is91.36% MobileNetV2 and93.83% EfficientNetB0 on162views; no reserved-test or camera performance follows. The primary architecture remains MobileNet, both serving pins stay null, and the [reserved-source audit/evaluation](research/PARCEL_SOURCE_TEST_PLAN_2026-10-21.md), compatible serving artifacts and actual photo/live acceptance remain required before FR-10/FR-11 completion. This updates research progress without changing shared application workflows or production.
+
+## FR-10/FR-11 internal comparison completed; acceptance remains incomplete — 21 October 2026
+
+The [once-only internal comparison](research/KAPUTT_INTERNAL_EVALUATION_2026-10-21.md) is completed, independently audited and permanently consumed:122admitted images/25exclusions, MobileNetV2 accuracy56.56% and Damaged recall44.64%, EfficientNetB0 accuracy52.46% and Damaged recall57.14%. Seven native stages pass unchanged limits; original sources/models remain preserved. These are conditional publisher-source findings, not shipping-parcel/live acceptance. Earlier unopened/evaluator-pending statements below are superseded. Existing photo/live software remains verified with both model gates closed. Public-only data, visible labels/physical grouping, justified acceptance criteria and actual camera/device measurements remain the core outstanding requirements. No production, other-AI or additional-feature completion follows.
+
+## FR-7/FR-10/FR-11 photo/live software checkpoint — 21 October 2026
+
+Stage-linked photos now have recoverable trusted request/outcome and human-review records. Sampled live analysis has separate admission, explicit preview/start/stop, bounded frame/session identity, cancellation/recovery, stale-result rejection, retained frames and paged historical review. [Verification](docs/PARCEL_LIVE_FOUNDATION_2026-10-21.md) covers real local commands/rules/browser workflows, independent review, original regressions, final build/lint and private-artifact/research preservation. Both reviewed history defects are fixed; existing stock, handover, shared Admin and eight-card interface are preserved.
+
+These are partial FR-10/FR-11 implementations because meaningful real-model availability and intended-use condition quality remain unaccepted. Current real outcomes are Unavailable, not Normal/Damaged. Independent relevant shipping-parcel/session labels, controlled source evaluation and actual camera/device measurements remain required. The 147 reserved candidates remain unopened while separate evaluation software is developed with artificial fixtures. No production, other-AI or additional-feature completion is claimed. This supersedes software-pending portions of the historical snapshots below.
+
+## FR-7 stage acquisition checkpoint — 20 October 2026
+
+Prepared parcels now support Pre-dispatch images through Warehouse Operations and Delivery Monitoring; dispatched parcels retain Delivery image/proof uploads. Current authorization is enforced at Storage creation and before/at trusted registration. Version-2 integrity binds explicit stage/source/time/version while legacy v1 bytes remain unchanged. [Local verification](docs/PARCEL_EVIDENCE_STAGE_VERIFICATION_2026-10-20.md) covers both stages, rejected transitions, desktop/mobile UI and existing workflows. This closes the stage acquisition gap recorded below; it does not complete FR-10 evaluated image/live inference or FR-11 persistent model/session outcomes.
+
+## Parcel acquisition progress — 20 October 2026
+
+Manual photo selection/review and camera preview/capture now work in Delivery Monitoring with explicit evidence upload and camera cleanup. [Verification](docs/PARCEL_CAPTURE_2026-10-20.md) covers synthetic camera/browser tests and an actual-app local-emulator upload. FR-7 stage linkage remains partial; FR-10 evaluated classification and repeated sampled-frame analysis, and FR-11 model/session result traceability remain incomplete. Earlier references below to no camera stream implementation describe the previous snapshot. No AI accuracy or physical-camera validation is claimed.
+
+## Parcel photo and live-camera traceability correction — 20 October 2026
+
+The current priority is parcel-condition work; inventory-risk and delivery-risk development are deferred while their plans/results and confirmation reservations remain intact. Both photo analysis and live sampled-frame analysis are core unfinished report scope. The original portfolio hash, source locations and detailed boundaries are recorded in docs/PARCEL_CAMERA_SCOPE_2026-10-20.md.
+
+| Report evidence | Required behaviour | Current evidence and remaining gap |
+|---|---|---|
+| Logistics FR-7 and FR-10 | Stage-linked photo evidence and OpenCV/MobileNetV2 classification, with EfficientNetB0 comparison | EvidenceUpload.tsx has a file picker; ResearchVerification.tsx requests analysis; research/vision.py supports one image and an experiment scaffold. Full staged photo acceptance and a validated primary model remain incomplete. |
+| Logistics FR-11 | Traceable results, processing time/model reference, confidence and authorised human review | Review infrastructure exists; both final photo acceptance and live session/frame result linkage require validation. |
+| Section 3.4.5/Figure 3.9; Figures 4.10, 4.13, 4.14 and 4.23 | Webcam capture, repeated sampled-frame preprocessing/classification and visible inspection results | No live camera stream/sampling implementation or measured live-session evaluation is established by current source. This remains core work, not an additional feature. |
+| Parcel evaluation requirement and independence controls | Approved Normal/Damaged labels; MobileNetV2/EfficientNetB0 comparison; held-out evidence | The 440 synthetic images/133 proposed groups remain subject to human approval. Real sources need audit; related parcel/session frames must stay together. Synthetic results cannot establish real-photo/live-camera quality. |
+
+Next stages are real-source audit, human labels/grouping approval, image-model evaluation, photo integration, camera sampling and live-session quality/latency evaluation. Camera permission/session controls, bounded queues/backpressure, drop-stale policy and resource/latency criteria are proposed future acceptance checks; no fixed frame rate or continuous background capability is claimed. Earlier scope summaries and checklists below remain historical. The Olist confirmation reservation and unaccepted joint-confirmation amendment are unchanged; this documentation correction performs no training or application change.
+
 ## Stock/location/correction traceability — 10 October 2026
 
 Inventory FR-17, FR-18 movement retry protection and FR-30 linked corrections have local implementation in lib/locationStock.js, validation.js, trusted stock/approval/warehouse/dispatch transactions, Firestore correction-claim rules, Stock Management and Reporting & Verification. The scenario/emulator/browser evidence and versioned integrity format are recorded in docs/STOCK_LOCATIONS_CORRECTIONS_2026-10-10.md.

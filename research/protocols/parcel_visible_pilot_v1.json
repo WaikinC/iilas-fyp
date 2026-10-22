@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "benchmark_profile": "parcel_visible_development",
+  "evaluation_scope": "development_only",
+  "operationally_approved": false,
+  "input_scope": "full_exported_frame",
+  "seed": 42,
+  "batch_size": 4,
+  "epochs": 10,
+  "patience": 3,
+  "learning_rate": 0.001,
+  "dropout": 0.2,
+  "fit_ids": [
+    "mobilenetv2-clahe",
+    "efficientnetb0-none"
+  ],
+  "class_order": [
+    "Normal",
+    "Damaged"
+  ],
+  "preprocessing": "rgb-letterbox224-v1",
+  "weighting": "equal_dependency_component_mean1",
+  "selection": "component_macro_f1_desc-nll_asc-retain_mobilenet_on_exact_tie",
+  "probe": "fixed_train_batch_no_update_twice_cost_v1",
+  "limits": {
+    "develop": {
+      "max_wall_seconds": 6300,
+      "max_fit_seconds": 3000,
+      "max_rss_bytes": 2147483648,
+      "min_available_bytes": 3221225472,
+      "min_free_disk_bytes": 21474836480,
+      "max_output_bytes": 536870912,
+      "poll_seconds": 1.0,
+      "threads": 1,
+      "available_floor_bytes": 805306368
+    },
+    "probe": {
+      "max_wall_seconds": 180,
+      "max_fit_seconds": 180,
+      "max_rss_bytes": 2147483648,
+      "min_available_bytes": 3221225472,
+      "min_free_disk_bytes": 21474836480,
+      "max_output_bytes": 134217728,
+      "poll_seconds": 1.0,
+      "threads": 1,
+      "available_floor_bytes": 805306368
+    }
+  },
+  "packages": {
+    "tensorflow": "2.21.0",
+    "keras": "3.15.1",
+    "h5py": "3.14.0",
+    "numpy": "2.4.2",
+    "opencv-python-headless": "4.14.0.94"
+  },
+  "weights": {},
+  "weight_proofs": []
+}

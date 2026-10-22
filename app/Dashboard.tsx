@@ -8,7 +8,7 @@ import { dashboardSummary, inventoryTrend, timestampMillis, type DashboardRecord
 type Destination = 'dashboard' | 'products' | 'stock' | 'warehouse' | 'shipments' | 'procurement' | 'transport' | 'delivery' | 'reports';
 type Props = { products: Row[]; shipments: Row[]; movements: Row[]; activities: Row[]; scope: string; role: string; uid: string; onNavigate: (tab: Destination, filter?: 'all' | 'lowStock') => void };
 type Kind = keyof DashboardRecords;
-const collections: Record<Kind, string> = { purchases: 'purchaseOrders', deliveries: 'deliveries', predictions: 'predictions', evidence: 'evidence', verifications: 'verificationRecords' };
+const collections: Record<Kind, string> = { purchases: 'purchaseOrders', deliveries: 'deliveries', predictions: 'predictions', evidence: 'evidence', verifications: 'verificationRecords', parcelAnalyses: 'parcelAnalyses' };
 const label = (value: unknown) => typeof value === 'string' ? value : '';
 const date = (value: unknown) => timestampMillis(value) ? new Date(timestampMillis(value)).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Saving…';
 const statusColours: Record<string, string> = { Delivered: '#16a34a', Active: '#1b3b6f', Delayed: '#d97706', Failed: '#dc2626', Returned: '#6d28d9' };
@@ -43,8 +43,8 @@ export default function Dashboard({ products, shipments, movements, activities, 
   const statuses = Object.entries(summary.statusCounts).map(([name, value]) => ({ name, value, color: statusColours[name] }));
   const deliveryReady = data.ready('deliveries');
   const riskReady = data.ready('deliveries', 'predictions');
-  const parcelReady = data.ready('predictions', 'evidence');
-  const verificationReady = data.ready('predictions', 'evidence', 'verifications');
+  const parcelReady = data.ready('predictions', 'evidence', 'parcelAnalyses');
+  const verificationReady = data.ready('predictions', 'evidence', 'verifications', 'parcelAnalyses');
   const alerts = [
     ...summary.lowStock.slice(0, 2).map(p => ({ id: `stock-${p.id}`, text: `${label(p.name)} has reached its reorder level.`, detail: `${Number(p.quantityOnHand ?? 0) - Number(p.reservedQuantity ?? 0)} available · reorder at ${Number(p.reorderLevel ?? 0)}`, tone: 'amber', open: () => onNavigate('products', 'lowStock') })),
     ...(riskReady ? summary.highRisk.slice(0, 1).map(p => ({ id: p.id, text: `${label(visibleShipments.find(s => s.id === p.recordId)?.reference)} has a saved high-risk prediction.`, detail: `${Math.round(Number(p.confidence) * 100)}% model confidence · ${label(p.reviewStatus)} review`, tone: 'red', open: () => onNavigate('reports') })) : []),
@@ -66,7 +66,7 @@ export default function Dashboard({ products, shipments, movements, activities, 
       <Stat icon={<Truck size={19}/>} value={summary.prepared.length} title="Prepared shipments" detail="Warehouse handover complete" tone="purple" onClick={() => onNavigate('shipments')}/>
       <Stat icon={<Navigation size={19}/>} value={deliveryReady ? summary.activeDeliveries.length : null} title="Active deliveries" detail={role === 'Driver' ? 'Your dispatched, unfinished jobs' : 'Dispatched, not delivered or returned'} tone="blue" onClick={() => onNavigate('delivery')}/>
       <Stat icon={<ShieldAlert size={19}/>} value={riskReady && summary.currentDeliveryPredictions.length ? summary.highRisk.length : null} title="High-risk deliveries" detail={!riskReady ? 'Loading saved risk results…' : summary.currentDeliveryPredictions.length ? `${summary.currentDeliveryPredictions.length} active deliveries analysed` : 'No current saved risk predictions'} tone="red" onClick={() => onNavigate('reports')}/>
-      <Stat icon={<Camera size={19}/>} value={parcelReady && summary.currentParcelPredictions.length ? summary.damageAlerts.length : null} title="Damage alerts" detail={!parcelReady ? 'Loading saved parcel results…' : summary.currentParcelPredictions.length ? `${summary.damageAlerts.filter(p => p.reviewStatus === 'Pending').length} awaiting human review` : 'No current saved parcel predictions'} tone="red" onClick={() => onNavigate('reports')}/>
+      <Stat icon={<Camera size={19}/>} value={parcelReady && summary.currentParcelPredictions.length ? summary.damageAlerts.length : null} title="Damage alerts" detail={!parcelReady ? 'Loading saved parcel results…' : summary.currentParcelPredictions.length ? `${summary.currentParcelPredictions.length} current, human-accepted assessments` : 'No current accepted parcel assessments'} tone="red" onClick={() => onNavigate('reports')}/>
       <Stat icon={<Clock size={19}/>} value={verificationReady ? summary.pendingVerification.length : null} title="Evidence awaiting verification" detail="Proofs and accepted damage results" tone="purple" onClick={() => onNavigate('reports')}/>
     </div>
     <div className="prototype-charts">

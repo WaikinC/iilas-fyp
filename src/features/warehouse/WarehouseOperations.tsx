@@ -5,10 +5,13 @@ import Field from "../../components/FormField";
 import Pagination, {usePagination} from "../../components/Pagination";
 import { advanceWarehouse } from "@/lib/firebase";
 import {workspaceCommand} from '@/lib/workspace';
+import type {Membership} from '../workspace/WorkspaceGate';
+import PreDispatchEvidence from '../operations/PreDispatchEvidence';
 
 type RecordData = { id: string; version: number; [key: string]: unknown };
 type Item = { allocations?:{location:string;quantity:number}[]; productId: string; name: string; sku: string; quantity: number };
 type Props = {
+  member:Membership;
   readOnly?:boolean;
   products:RecordData[];
   shipments: RecordData[];
@@ -19,7 +22,7 @@ type Props = {
 };
 const timestamp = (input: unknown) => input && typeof input === "object" && "seconds" in input ? new Date(Number(input.seconds) * 1000).toLocaleString() : "—";
 
-export default function WarehouseOperations({shipments, handovers, products, onNotice, onError, onDispatch,readOnly=false}: Props) {
+export default function WarehouseOperations({member,shipments, handovers, products, onNotice, onError, onDispatch,readOnly=false}: Props) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Active jobs");
   const jobs = shipments.map(shipment => ({shipment, handover:handovers.find(record => record.id === shipment.id)}))
@@ -34,10 +37,11 @@ export default function WarehouseOperations({shipments, handovers, products, onN
     <div className="warehouse-jobs">{pages.pageItems.map(({shipment,handover}) => <WarehouseJob key={`${shipment.id}-${handover?.version ?? 0}`} shipment={shipment} handover={handover} products={products} readOnly={readOnly} onNotice={onNotice} onError={onError}/>)}</div>
     {jobs.length>0&&<Pagination {...pages} label="warehouse jobs"/>}
     {!jobs.length && <section className="module-card warehouse-empty"><ClipboardList size={30}/><p>No jobs in this view. Create a Draft shipment to begin, or choose All stages to review completed handovers.</p></section>}
+    <PreDispatchEvidence member={member} shipments={shipments}/>
   </div>;
 }
 
-function WarehouseJob({shipment,handover,products,onNotice,onError,readOnly=false}: Omit<Props,"shipments"|"handovers"|"onDispatch"> & {shipment:RecordData;handover?:RecordData}) {
+function WarehouseJob({shipment,handover,products,onNotice,onError,readOnly=false}: Omit<Props,"member"|"shipments"|"handovers"|"onDispatch"> & {shipment:RecordData;handover?:RecordData}) {
   const [notes,setNotes] = useState(String(handover?.notes ?? ""));
   const [parcels,setParcels] = useState(String(handover?.parcelCount ?? shipment.parcelCount));
   const [confirmed,setConfirmed] = useState(false);

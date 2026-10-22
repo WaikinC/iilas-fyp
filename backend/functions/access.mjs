@@ -38,17 +38,23 @@ export async function registerAccount(auth,input){
   });
 }
 
-export async function approvedTransaction(auth,roles,work){
-  return getFirestore().runTransaction(async tx=>{
+export async function approvedTransaction(auth,roles,work,guard){
+  // Optional server-owned operation fencing. Existing callers retain identical
+  // semantics; live commands use it for retries, protected reads and scheduling.
+  return getFirestore().runTransaction(async original=>{
+    const tx=guard?guard(original):original;
     const config=await tx.get(configRef()),profile=await tx.get(userRef(auth.uid));
     const account=profile.data();
     if(!config.exists||!account||account.status!=='Approved'||!account.active||!roles.includes(account.role))fail('Your account is not approved for this operation.','permission-denied');
-    return work(tx,config.data(),account);
+    if(guard)guard(original);
+    const result=await work(tx,config.data(),account);
+    if(guard)guard(original);
+    return result;
   });
 }
 
-export async function approvedScope(auth){
-  return approvedTransaction(auth,ROLES,async(_tx,config)=>config.dataScopeId);
+export async function approvedScope(auth,guard){
+  return approvedTransaction(auth,ROLES,async(_tx,config)=>config.dataScopeId,guard);
 }
 
 export async function updateAccount(auth,input){

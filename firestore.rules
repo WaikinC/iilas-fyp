@@ -28,6 +28,29 @@ service cloud.firestore {
     match /stockRequests/{id} {
       allow read, write: if false;
     }
+    // Private immutable operation receipts and exact-coordinate evidence leases.
+    match /parcelAnalysisRequests/{id} {
+      allow read, write: if false;
+    }
+    match /parcelAnalysisLocks/{id} {
+      allow read, write: if false;
+    }
+    // Safe public outcome DTOs retain fixed-scope Approved staff historical reads.
+    match /parcelAnalyses/{id} {
+      allow read: if shared(resource.data);
+      allow write: if false;
+    }
+    match /parcelLiveStartRequests/{id} { allow read, write: if false; }
+    match /parcelLiveFrameRequests/{id} { allow read, write: if false; }
+    match /parcelLiveActorLocks/{id} { allow read, write: if false; }
+    match /parcelLiveSessions/{id} {
+      allow read: if shared(resource.data);
+      allow write: if false;
+    }
+    match /parcelLiveFrames/{id} {
+      allow read: if shared(resource.data);
+      allow write: if false;
+    }
     // procurementKeys: private supplier/purchase/delivery-note uniqueness locks;
     // ownerId, kind, recordId and optional eventId. Only command transactions write.
     match /procurementKeys/{id} {

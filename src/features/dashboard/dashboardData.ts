@@ -1,7 +1,7 @@
 export type DashboardRow = { id: string; [key: string]: unknown };
 export type DashboardRecords = {
   purchases: DashboardRow[]; deliveries: DashboardRow[]; predictions: DashboardRow[];
-  evidence: DashboardRow[]; verifications: DashboardRow[];
+  evidence: DashboardRow[]; verifications: DashboardRow[]; parcelAnalyses?: DashboardRow[];
 };
 export const timestampMillis = (value: unknown): number => {
   if (!value || typeof value !== 'object' || !('seconds' in value)) return 0;
@@ -9,9 +9,10 @@ export const timestampMillis = (value: unknown): number => {
 };
 const latestPredictions = (records: DashboardRow[], kind: string) => {
   const latest = new Map<string, DashboardRow>();
+  const time = (row: DashboardRow) => kind === 'parcel' && typeof row.createdAt === 'number' && Number.isSafeInteger(row.createdAt) && row.createdAt >= 0 ? row.createdAt : timestampMillis(row.createdAt);
   for (const row of records.filter(r => r.kind === kind)) {
     const key = String(row.recordId), previous = latest.get(key);
-    if (!previous || timestampMillis(row.createdAt) > timestampMillis(previous.createdAt)) latest.set(key, row);
+    if (!previous || time(row) > time(previous)) latest.set(key, row);
   }
   return [...latest.values()];
 };
@@ -31,7 +32,18 @@ export function dashboardSummary(products: DashboardRow[], shipments: DashboardR
   const highRisk = currentDeliveryPredictions.filter(p => String(p.label).toLowerCase() === 'high');
   const currentParcelPredictions = latestPredictions(records.predictions, 'parcel').filter(p => {
     const evidence = records.evidence.find(e => e.id === p.recordId);
-    return evidence && p.sourceVersion === evidence.version && p.reviewStatus !== 'Rejected';
+    const analysis = records.parcelAnalyses?.find(a => a.analysisId === p.analysisId && a.id === p.analysisId);
+    const shipment = shipments.find(s => s.id === evidence?.shipmentId);
+    const stageCurrent = evidence?.stage === 'Pre-dispatch' && shipment?.status === 'Prepared' || evidence?.stage === 'Delivery' && shipment?.status === 'Dispatched';
+    return evidence?.type === 'Parcel Image' && stageCurrent && analysis?.state === 'Predicted' &&
+      p.reviewStatus === 'Accepted' && analysis.reviewStatus === 'Accepted' &&
+      ['Normal', 'Damaged'].includes(String(p.label)) && p.label === analysis.label &&
+      analysis.predictionId === p.id && p.sourceVersion === evidence.version && analysis.evidenceVersion === evidence.version &&
+      typeof evidence.sha256 === 'string' && /^[a-f0-9]{64}$/.test(evidence.sha256) &&
+      p.evidenceSha256 === evidence.sha256 && analysis.evidenceSha256 === evidence.sha256 &&
+      p.stage === evidence.stage && analysis.stage === evidence.stage && analysis.evidenceId === evidence.id &&
+      p.shipmentId === shipment?.id && analysis.shipmentId === shipment?.id &&
+      evidence.ownerId === p.ownerId && analysis.ownerId === evidence.ownerId;
   });
   const damageAlerts = currentParcelPredictions.filter(p => String(p.label).toLowerCase() === 'damaged');
   const verificationCandidates = records.evidence.filter(e => e.type === 'Proof of Delivery' ||

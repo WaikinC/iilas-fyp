@@ -1,7 +1,9 @@
 {
   "indexes": [
     {"collectionGroup":"stockMovements","queryScope":"COLLECTION","fields":[{"fieldPath":"ownerId","order":"ASCENDING"},{"fieldPath":"productId","order":"ASCENDING"}]},
-    {"collectionGroup":"deliveryEvents","queryScope":"COLLECTION","fields":[{"fieldPath":"ownerId","order":"ASCENDING"},{"fieldPath":"shipmentId","order":"ASCENDING"}]}
+    {"collectionGroup":"deliveryEvents","queryScope":"COLLECTION","fields":[{"fieldPath":"ownerId","order":"ASCENDING"},{"fieldPath":"shipmentId","order":"ASCENDING"}]},
+    {"collectionGroup":"parcelLiveSessions","queryScope":"COLLECTION","fields":[{"fieldPath":"ownerId","order":"ASCENDING"},{"fieldPath":"shipmentId","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]},
+    {"collectionGroup":"parcelLiveFrames","queryScope":"COLLECTION","fields":[{"fieldPath":"ownerId","order":"ASCENDING"},{"fieldPath":"sessionId","order":"ASCENDING"},{"fieldPath":"sequence","order":"ASCENDING"}]}
   ],
   "fieldOverrides": [
     {"collectionGroup":"products","fieldPath":"imageDataUrl","indexes":[]}

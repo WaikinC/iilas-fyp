@@ -1,0 +1,83 @@
+// External browser doubles isolate real React controls/retry helpers from Firebase.
+// Production code has no test flag, accepted-model override or injected handler.
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+const require=createRequire(import.meta.url);
+const {chromium}=require(process.env.IILAS_PLAYWRIGHT_MODULE||'C:/Users/Home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const output=resolve('outputs/parcel-photo-outcomes-20261021');await mkdir(output,{recursive:true});
+const browser=await chromium.launch({channel:'msedge',headless:true});
+const results=[];
+try {
+  const context=await browser.newContext({viewport:{width:1280,height:900}});
+  await context.addInitScript(()=>{
+    window.uiQA={member:null,records:[],predictions:[],calls:[],mode:new URLSearchParams(location.search).get('mode')||'unavailable',release:null,listeners:[]};
+    const q=window.uiQA,h='a'.repeat(64),op='12345678-1234-4123-8123-123456789abc';
+    q.record=(patch={})=>({ownerId:'scope',analysisId:'analysis',actorUid:'actor',operationId:op,shipmentId:'shipment',evidenceId:'evidence',evidenceVersion:2,evidenceSha256:h,stage:'Pre-dispatch',shipmentVersion:4,captureSource:'file',capturedAtClient:null,model:null,state:'Unavailable',version:2,createdAt:1000,updatedAt:2000,expiresAt:91000,completedAt:2000,label:null,probabilities:null,confidence:null,confidenceMeaning:null,serviceRequestId:null,processingTimeMs:null,totalProcessingTimeMs:null,predictionId:null,reasonCode:'model-unavailable',reviewStatus:'NotRequired',reviewNotes:null,reviewedBy:null,reviewedAt:null,humanReviewRequired:false,...patch});
+    q.inference=state=>q.record({analysisId:state==='Abstained'?'analysis-abstained':'analysis',state,reasonCode:null,model:{model:'MobileNetV2',modelVersion:h,selectionSha256:h,evaluationSha256:h,acceptanceSha256:h,preprocessing:'mobilenet-v2',contrast:'clahe',classOrder:['Normal','Damaged']},label:state==='Predicted'?'Damaged':null,probabilities:state==='Predicted'?[0.2,0.8]:[0.5,0.5],confidence:state==='Predicted'?0.8:0.5,confidenceMeaning:'uncalibrated',predictionId:state==='Predicted'?'parcel-analysis':null,serviceRequestId:op,processingTimeMs:12,totalProcessingTimeMs:20,reviewStatus:'Pending',humanReviewRequired:true});
+    q.publish=records=>{q.records=records;q.listeners.forEach(fn=>fn());};
+    q.publishPredictions=records=>{q.predictions=records;q.listeners.forEach(fn=>fn());};
+    q.command=async(name,input)=>{
+      q.calls.push({name,input});
+      if(q.mode==='lost'){q.mode='unavailable';throw new Error('Synthetic lost response');}
+      if(q.mode==='delayed')await new Promise(resolve=>{q.release=resolve;});
+      if(q.mode==='busy'&&name==='startParcelAnalysis')return {state:'Busy',analysisId:'analysis',reasonCode:'evidence-busy'};
+      if(q.mode==='foreign')return q.record({ownerId:'foreign-scope'});
+      if(name==='reviewParcelAnalysis')return q.record({...q.records[0],version:3,updatedAt:3000,reviewStatus:input.decision,reviewNotes:input.notes,reviewedBy:'actor',reviewedAt:3000,humanReviewRequired:false});
+      const r=q.record({operationId:input.operationId||q.calls.find(c=>c.name==='startParcelAnalysis')?.input.operationId||op,actorUid:q.member.uid});
+      if(q.mode==='running')Object.assign(r,{state:'Running',version:1,updatedAt:1000,completedAt:null,reasonCode:null});
+      return r;
+    };
+  });
+  await context.route('**/lib/firebase.js*',route=>route.fulfill({contentType:'text/javascript',body:'export const db={}; export const auth={get currentUser(){return {uid:window.uiQA.member.uid}}};'}));
+  await context.route('**/lib/workspace.js*',route=>route.fulfill({contentType:'text/javascript',body:'export const getActiveWorkspace=()=>window.uiQA.member; export const workspaceCommand=(...args)=>window.uiQA.command(...args);'}));
+  await context.route('**/firebase_firestore.js*',route=>route.fulfill({contentType:'text/javascript',body:`export const collection=(_,name)=>({name});export const where=(...args)=>args;export const query=(ref,...filters)=>({...ref,filters});export function onSnapshot(query,fn){const q=window.uiQA;q.queries??=[];q.queries.push(query);const notify=()=>fn({docs:(query.name==='parcelAnalyses'?q.records:query.name==='predictions'?q.predictions:[]).map(r=>({id:r.analysisId||r.id,data:()=>r}))});q.listeners.push(notify);notify();return()=>{q.listeners=q.listeners.filter(x=>x!==notify);};}`}));
+  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const load=async(suffix='')=>{await page.goto('http://127.0.0.1:5173/scripts/fixtures/parcel-analysis-ui/harness.html'+suffix);await page.getByRole('heading',{name:'Parcel analysis component fixture'}).waitFor();};
+  const button=name=>page.getByRole('button',{name,exact:true});
+  await load();
+  assert.equal(await button('Request analysis').count(),1,'eligible Warehouse sees the evidence-level action');
+  assert.equal(await page.evaluate(()=>window.uiQA.calls.length),0);await button('Request analysis').focus();await page.keyboard.press('Enter');await page.getByText('No evaluated parcel model is available.',{exact:true}).waitFor();
+  assert.equal(await page.locator('.parcel-analysis').getByText('Normal',{exact:true}).count(),0);
+  assert.equal(await page.evaluate(()=>sessionStorage.length),0);results.push('Warehouse explicit request shows saved unavailable outcome without a Normal label');
+  await page.evaluate(()=>{window.uiQA.mode='lost';});await button('Request analysis').click();await page.getByRole('alert').waitFor();
+  const saved=await page.evaluate(()=>JSON.parse(sessionStorage.getItem(sessionStorage.key(0))));assert.deepEqual(Object.keys(saved).sort(),['actorUid','evidenceId','operationId','scopeId']);
+  await load();assert.equal(await button('Request analysis').count(),0);await button('Check outcome').click();await page.getByText('No evaluated parcel model is available.',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.uiQA.calls[0].input.operationId),saved.operationId);results.push('lost response reload recovers the same four-ID intent with no automatic request');
+  await page.evaluate(()=>{window.uiQA.mode='busy';});await button('Request analysis').click();await page.getByText(/Another parcel analysis is already running for this image\./).waitFor();
+  const blockedOperation=await page.evaluate(()=>JSON.parse(sessionStorage.getItem(sessionStorage.key(0))).operationId);
+  await load('?mode=busy');assert.equal(await page.evaluate(()=>window.uiQA.calls.length),0);await button('Check outcome').click();await page.getByText(/Another parcel analysis is already running for this image\./).waitFor();assert.equal(await page.evaluate(()=>window.uiQA.calls[0].input.operationId),blockedOperation);
+  await page.evaluate(()=>{window.uiQA.mode='unavailable';});
+  await button('Check outcome').click();await page.getByText('No evaluated parcel model is available.',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.uiQA.calls.at(-1).name),'resolveParcelAnalysis');results.push('Busy requires an explicit Check and resolves its blocker without a replacement start');
+  await page.evaluate(()=>{window.uiQA.mode='delayed';});await button('Request analysis').click();await button('Change access version').click();await page.evaluate(()=>window.uiQA.release());
+  await page.waitForTimeout(80);assert.equal(await page.getByText('No evaluated parcel model is available.',{exact:true}).count(),0);assert.equal(await button('Check outcome').count(),1);results.push('access-version remount drops late result while preserving recovery');
+  await page.evaluate(()=>{window.uiQA.mode='unavailable';});await button('Dispatch fixture').click();assert.equal(await button('Request analysis').count(),0);await button('Check outcome').click();await page.getByText('No evaluated parcel model is available.',{exact:true}).waitFor();results.push('historical pre-dispatch outcome recovers after dispatch without enabling a new start');
+  await button('Viewer fixture').click();assert.equal(await button('Request analysis').count(),0);await page.evaluate(()=>window.uiQA.publish([window.uiQA.inference('Predicted')]));await page.getByText('Human review required',{exact:true}).waitFor();assert.equal(await button('Record human review').count(),0);
+  await button('Inventory fixture').click();assert.equal(await button('Request analysis').count(),0);results.push('Viewer and Inventory can read historical outcomes but cannot start or review');
+  await button('Manager fixture').click();await page.evaluate(()=>window.uiQA.publish([window.uiQA.inference('Predicted')]));const beforeReview=await page.evaluate(()=>window.uiQA.calls.length);await button('Record human review').click();assert.equal(await page.evaluate(()=>window.uiQA.calls.length),beforeReview);
+  await page.getByLabel('Parcel review notes').pressSequentially('p'.repeat(241));assert.equal((await page.getByLabel('Parcel review notes').inputValue()).length,240,'parcel analysis review prevents typing beyond its 240-character command limit');
+  await page.getByLabel('Parcel review notes').fill('Physical inspection completed');await button('Record human review').click();await page.getByText('Review: Accepted',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.uiQA.calls.at(-1).input.decision),'Accepted');results.push('Predicted human acceptance uses versioned analysis review');
+  await page.evaluate(()=>window.uiQA.publish([{...window.uiQA.inference('Predicted'),analysisId:'analysis-reject',predictionId:'parcel-analysis-reject'}]));await page.getByLabel('Parcel review notes').fill('Damage result rejected after inspection');await page.getByLabel('Parcel review decision').selectOption('Rejected');await button('Record human review').click();await page.getByText('Review: Rejected',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.uiQA.calls.at(-1).input.decision),'Rejected');results.push('required notes and explicit Reject decision protect the review form');
+  await page.evaluate(()=>window.uiQA.publish([window.uiQA.inference('Abstained')]));await page.getByLabel('Parcel review notes').fill('Inspect visible parcel faces manually');await button('Record human review').click();await page.getByText('Review: Reviewed',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.uiQA.calls.at(-1).input.decision),'Reviewed');assert.equal(await page.locator('.parcel-analysis').getByText('Normal',{exact:true}).count(),0);results.push('Abstained review requires notes and records Reviewed without a label');
+  await button('Driver fixture').click();assert.equal(await button('Request analysis').count(),1);await button('Unassigned driver fixture').click();assert.equal(await button('Request analysis').count(),0);await button('Legacy fixture').click();assert.equal(await button('Request analysis').count(),0);await button('Proof fixture').click();assert.equal(await page.locator('.parcel-analysis').count(),0);results.push('assigned Driver only, known stages only, no Proof of Delivery analysis');
+  await load();
+  for(const [state,reasonCode,patch] of [['Failed','service-failed',{}],['Stale','context-changed',{}],['Expired','lease-expired',{completedAt:91000,updatedAt:91000}]]){
+    await page.evaluate(({state,reasonCode,patch})=>window.uiQA.publish([window.uiQA.record({state,reasonCode,...patch})]),{state,reasonCode,patch});
+    await page.getByRole('heading',{name:state,exact:true}).waitFor();assert.equal(await page.locator('.parcel-analysis').getByText('Normal',{exact:true}).count(),0);
+  }
+  await page.evaluate(()=>window.uiQA.publish([window.uiQA.record({state:'Running',version:1,completedAt:null,updatedAt:1000,reasonCode:null})]));await button('Check saved outcome').click();await page.getByText('No evaluated parcel model is available.',{exact:true}).waitFor();results.push('failure, stale, expiry and historical Running checks never fabricate a label');
+  await load();await page.evaluate(()=>{window.uiQA.mode='foreign';window.uiQA.publish([window.uiQA.record({state:'Running',version:1,completedAt:null,updatedAt:1000,reasonCode:null})]);});await button('Check saved outcome').click();await page.getByRole('alert').waitFor();assert.equal(await page.getByText('No evaluated parcel model is available.',{exact:true}).count(),0);results.push('historical resolve validates response scope and evidence before rendering');
+  await load();await page.evaluate(()=>window.uiQA.publish([window.uiQA.record({ownerId:'foreign-scope',privateMessage:'private-token-must-not-render'})]));await page.getByRole('alert').waitFor();assert.equal(await page.getByText('private-token-must-not-render').count(),0);assert.equal(await page.locator('.parcel-analysis-outcome').count(),0);results.push('cross-scope or malformed saved records are withheld by the public parser and context filter');
+  assert.equal(await page.evaluate(()=>window.uiQA.queries.every(q=>q.name==='parcelAnalyses'&&JSON.stringify(q.filters)==='[["ownerId","==","scope"]]')),true);
+  await load();await page.evaluate(()=>window.uiQA.publish([window.uiQA.inference('Predicted')]));
+  for(const width of [390,320]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${width}px overflow`);await page.screenshot({path:resolve(output,`ui-${width}.png`),fullPage:true});}
+  await load('?view=research');await button('Manager fixture').click();assert.deepEqual(await page.getByLabel('Research analysis').locator('option').evaluateAll(options=>options.map(o=>o.value)),['inventory','delivery']);
+  await page.getByLabel('Research record').selectOption('product');await button('Request analysis').click();await page.getByText('Prediction stored for human review.',{exact:true}).waitFor();assert.deepEqual(await page.evaluate(()=>window.uiQA.calls.at(-1)),{name:'predict',input:{kind:'inventory',id:'product'}});
+  await page.evaluate(()=>window.uiQA.publishPredictions([{id:'legacy',kind:'parcel',label:'Damaged',model:'Historical model',modelVersion:'v1',confidence:0.75,reviewStatus:'Pending',version:1}]));await page.getByLabel('Review notes',{exact:true}).fill('Historical record inspected');await page.getByLabel('Prediction review decision').selectOption('Reject');await button('Record review').click();await page.getByText('Human review recorded.',{exact:true}).waitFor();assert.deepEqual(await page.evaluate(()=>window.uiQA.calls.at(-1)),{name:'reviewPrediction',input:{notes:'Historical record inspected',decision:'Reject',id:'legacy',version:1}});results.push('generic parcel submission removed while Random Forest requests and historical parcel review remain usable');
+  await page.evaluate(()=>window.uiQA.publishPredictions([{id:'legacy-long',kind:'parcel',label:'Damaged',model:'Historical model',modelVersion:'v1',confidence:0.75,reviewStatus:'Pending',version:1}]));await page.getByLabel('Review notes',{exact:true}).fill('');await page.getByLabel('Review notes',{exact:true}).pressSequentially('u'.repeat(501));assert.equal((await page.getByLabel('Review notes',{exact:true}).inputValue()).length,500,'unlinked historical review preserves its 500-character limit');await button('Record review').click();assert.equal(await page.evaluate(()=>window.uiQA.calls.at(-1).input.notes.length),500);
+  await page.evaluate(()=>window.uiQA.publishPredictions([{id:'linked-long',analysisId:'analysis',kind:'parcel',label:'Damaged',model:'MobileNetV2',modelVersion:'v1',confidence:0.75,reviewStatus:'Pending',version:1}]));await page.getByLabel('Review notes',{exact:true}).fill('');await page.getByLabel('Review notes',{exact:true}).pressSequentially('l'.repeat(241));assert.equal((await page.getByLabel('Review notes',{exact:true}).inputValue()).length,240,'linked historical review prevents typing beyond the parcel command limit');await button('Record review').click();assert.equal(await page.evaluate(()=>window.uiQA.calls.at(-1).input.notes.length),240);results.push('parcel and linked reviews enforce 240 typed characters while unlinked history retains 500');
+  assert.deepEqual(errors,[]);results.push('390/320px component layout stays within viewport');
+  await writeFile(resolve(output,'ui-component-results.json'),JSON.stringify({results,errors},null,2));console.log(JSON.stringify({passed:results.length,results},null,2));
+} finally {await browser.close();}

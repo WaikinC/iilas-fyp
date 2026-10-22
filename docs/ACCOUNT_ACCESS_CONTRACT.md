@@ -1,5 +1,15 @@
 # IILAS account approval and shared data contract
 
+## Live-session boundary — 21 October 2026
+
+The [live-session implementation](PARCEL_LIVE_FOUNDATION_2026-10-21.md) uses the same protected fixed scope and active Approved accounts. New capture follows the existing shipment stage/role/Driver assignment matrix; original config/account/shipment/transport snapshots, actor lock, frame nonce and generation are rechecked before finalisation. Immutable private start/frame receipts and locks deny every client read/write. Safe public session/frame records permit Approved fixed-scope history reads and no direct writes. All client live Storage writes are denied; trusted ingestion retains bounded exact JPEG samples. Storage shared reads use only the current account and system/config documents.
+
+Creator or current Admin/Manager may explicitly stop; Approved staff can resolve historical records without restoring capture rights. Admin/Manager review requires exact retained-generation/bytes and a final current-authority/version check. A photo acceptance cannot grant live use; both real model pins remain null. Exact timeout/recovery identities survive uncertainty, and no live outcome changes stock, shipment state, initial Admin identity or personal-inventory ownership. Actual application integration, original sequential regressions and bounded-history review are locally verified. Shared history uses20session pages and12selected frames; a separate bounded current-session observer preserves remote-stop checks away from the latest page. Model quality and physical-camera acceptance remain incomplete; no deployment is authorised.
+
+## Parcel photo outcomes — 21 October 2026
+
+The [verified photo lifecycle](PARCEL_PHOTO_OUTCOMES_2026-10-21.md) derives scope/actor from this contract. Private operation/Blocked receipts and locks deny every client read/write; safe public analyses permit existing Approved/active fixed-scope shared reads and no direct writes. New requests follow current evidence stage/role/status/assignment policy. Historical matching replay/resolve remain readable by any Approved staff role after dispatch/reassignment, without granting new-start permission. Final transactions recheck current approval, exact snapshots/model/lease/nonce/lock identity; access loss cannot publish a label. Admin/Manager review updates reciprocal records atomically. No model pin opens and no stock, personal inventory or primary Admin identity is migrated.
+
 Updated 8 October 2026. This replaces the organisation/invitation model. Local implementation and emulator/browser evidence are available; the public site has not been updated.
 
 ## Account lifecycle

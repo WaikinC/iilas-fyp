@@ -1,0 +1,77 @@
+# Once-only crop internal evaluation implementation plan
+
+Goal: evaluate the frozen expanded development choices once on the 147 reserved internal TRAIN-source candidates, applying the policy fixed before development. This is an internal source benchmark, not IILAS operational acceptance. Other AI and additional features remain deferred.
+
+Current disposition on 21 October: **the once-only internal comparison is completed and independently audited**. Original 68500 is terminal exit zero; all seven native stages passed their unchanged caps, including actual score92.62seconds/120. The frozen policy admitted122images and excluded25 without replacement. Final independent review reproduces graph, dispositions, complete raw metrics/bootstrap and74metadata/source bindings. [The completed report](../../../research/KAPUTT_INTERNAL_EVALUATION_2026-10-21.md) records weak quality and remaining intended-use gaps. The claim is completed and permanently consumed. Original preclaim failure69844, source snapshots and all prospective protocols remain preserved. Software repairs passed164combined tests (163passed/one optional skip) and independent same-cap proofs before the explicit parent recovery decision. No model, threshold, label, statistical rule, resource cap or completed training source was changed from held-out outcomes. Both serving gates remain closed; no further test invocation or model activation is authorised by this plan. Full photo/live acceptance remains incomplete.
+
+## Preclaim memory repair — 21 October 2026
+
+Native monitoring correctly counts the supervisor and its descendants. The original controller imported the complete Parquet validation stack before launching another complete validator under a 512 MiB combined cap. A guarded metadata-only measurement found about 180.5 MiB retained after deleting the unused context, and a 366 MiB standalone validation peak. Releasing the unused context saves only about 4.75 MiB; it cannot establish that the nested hierarchy fits. Do not trim working sets, unload native modules, exclude the supervisor from accounting or raise caps to hide the failure.
+
+Keep the controller lightweight through reference/acquisition. The already fully verified top-level context can supply an exclusive derived reference-context JSON bound to the request/core. A controller-only reader verifies bounded metadata, protocol/source/environment/model/selection/negative-proof hashes, archive identity and this projection without importing Parquet libraries. Existing reference-index validation uses the exact projected reference rows, known edges and source receipts. Every real leaf still reconstructs and verifies the complete original context before any reference or test pixels, and checks that its reconstruction equals the derived projection. Full intake, post-worker admission, independent graph, raw inference and finalization guards remain unchanged. Derived context hashes enter the request after exclusive output creation, avoiding prospective hash cycles.
+
+Before any future invocation: observe RED/GREEN lifetime and control-binding regressions, run the affected checks, independently review the repair, demonstrate the lightweight-parent/full-validation-child hierarchy under the same 512 MiB cap with guarded metadata only, and freeze a new prospective protocol. The original failed output and all twelve bound source snapshots remain preserved. A fresh proposal may only represent the still-unused original scientific claim; it must never bypass an existing canonical or historical claim. No automatic recovery loop, alternate development identity or retry after scientific claim is added. Parent must explicitly reconcile this preclaim status before considering another invocation.
+
+Pre-implementation rulings: the canonical once-only test namespace is `research/datasets/kaputt-crop-test-registry/test-<development_key>`, matching the completed tail experiment's existing no-test guard. Reject an existing claim in either this namespace or the historical brief's `kaputt-crop-run-registry/test-<development_key>` spelling; never create an alternative to bypass it. New claims use the canonical namespace only. The earlier brief's resource table is provisional: use the explicit caps below and a stricter 20 GiB free-disk reserve for archive admission, frozen before access. No resource increase or retry follows a failed real claim. These rulings change no completed experiment, sealed source, old claim or candidate metadata.
+
+Sources: research/KAPUTT_CROP_DEVELOPMENT_2026-10-20.md; exact `internal_test_admission` object in the frozen local development protocol; ignored `outputs/kaputt-crop-development-20261020/evaluation-implementation-brief-01.md`. The brief supplies exact existing paths/hashes and failure cases; inspect the current completed selection before implementation/claim. No held-out pixel may be acquired until all four development fits, selection, receipts and completed development claim pass independent verification.
+
+## Constraints and fixed decisions
+
+- Preserve all seven bound development source modules, old sealed pilot sources, cohort, protocol, weights and results. Create separate test modules; never bypass a development-only reader by changing a row's split flag.
+- Use publisher labels unchanged. Exactly 147 candidate rows from the frozen reserved metadata; no replacements, relabelling, model/contrast/threshold changes, retraining or split-seed search after test pixels.
+- Retain all known 865-development-candidate and old-100 source-item/dHash graph edges as relay nodes. A test component is quarantined for a technical failure or if its transitive closure reaches frozen training/validation or old100. Contact with excluded-only nodes is not a new prohibited endpoint. Physical parcel independence remains unverified.
+- Technical limits: valid verified-source JPEG, minimum side 64, maximum 16 million pixels and 16 MiB encoded bytes. An inadequate view excludes its whole source-item group and connected test component; a corrupted/mismatched source archive fails acquisition rather than creating accepted evidence.
+- All acquisition, reference fingerprinting, decoding, inference and scoring use bounded offline Windows-supervised workers. No TensorFlow in metadata/control processes; CPU-only, one compute thread and serial models. Original 31.6 GB archive reused; no new download.
+- Create an exclusive once-only test claim keyed by development key before the first test pixel is read, including extraction/technical decode. Failed claims remain terminal; no automatic retry/replacement under another path/protocol. Metadata/resource preflight precedes the claim and contains no test pixel access.
+- Proposed limits, to freeze before the first test claim: reference stage 180 seconds/512 MiB RSS; full archive acquisition/admission 1,800 seconds/512 MiB; each model inference 300 seconds/2 GiB; score 120 seconds, total inference/score phase 1,200 seconds; outer attempt 3,300 seconds. Initial available RAM 3 GiB, floor 768 MiB, free disk reserve 20 GiB, output cap 512 MiB. Check available hardware with existing non-test evidence; no silent increase after a failed run.
+- Store all images, per-image/source IDs, labels, manifests, graph edges, weights, predictions, reports and resource records in ignored research datasets/outputs. Keep the operational pin null and serving closed.
+
+## Task 1 — strict test intake and admission
+
+Owner: one implementer, exclusive new `research/kaputt_crop_test_intake.py` and `research/test_kaputt_crop_test_intake.py`. No shared source edits.
+
+Interfaces:
+
+- `build_test_admission(development_manifest, selection_path, archive_path, destination, evaluation_binding) -> Path` returns a sealed complete admission artifact, only under a matching existing test claim and successful completed development.
+- `load_test_admission(path, verify_images=False) -> dict` validates provenance and dispositions without image reads by default.
+- A dedicated admitted-test image reader accepts only exact included rows after claim; it cannot open a foreign path/sample or alter source labels.
+
+Worker-completion clarification21October: the builder returns a staged technical/dependency manifest from inside the supervised acquisition worker. Only after that worker terminates successfully may control call `seal_successful_acquisition(manifest, native_result)` to create an exclusive sealed completion sidecar binding the exact manifest, claim/run/core and native acquisition result/limits. Public admission loading/readers must require that completion proof; an extraction manifest alone is not admitted. This avoids a circular receipt or a worker claiming its own future successful exit. A bounded validated reader may check the complete graph/model binding once per worker, exact membership/bytes per image and full bindings again before the final inference receipt; it must not rehash all models/reconstruct the full graph on every image or weaken mutation/claim guards.
+
+Steps:
+
+1. Write failing crafted-archive/software-image tests for claim/selection-before-pixels, unsafe metadata paths, source corruption, duplicate/foreign/missing members, tar/gzip/link/size guards and destination reuse. Observe RED.
+2. Add technical exclusion and graph tests: same-item mixed labels, bad view propagation, exact/decoded/dHash distance four versus five, transitive reference relays, old100/frozen endpoints, excluded-only contacts, stable order, complete 147 dispositions and no held-out metadata decode. Observe RED.
+3. Implement bounded extraction/staging without relaxing the old intake minimum-size guard or changing sealed code. Verify archive identity/completeness and all source metadata. Hold technically inadequate crops separately; never fabricate valid pixel hashes.
+4. Build a provenance-bound reference index, full dependency closure, complete inclusion/exclusion reasons and class/material attrition. Freeze admission before model inference. Store decoded images one at a time, not in a resident cache.
+5. Run focused GREEN tests. Independently reconstruct the graph/dispositions using separate logic. Verify each crop-only row states its honest source; no fake full-original provenance.
+
+## Task 2 — once-only evaluation and raw reporting
+
+Owner: separate implementer, exclusive new `research/kaputt_crop_evaluate.py` and `research/test_kaputt_crop_evaluate.py`. It consumes Task 1's interface.
+
+Interface: `test(selection_path, development_manifest, archive_path, evaluation_protocol, output) -> Path`. CLI `test`, `_reference`, `_phase`, `_acquire`, `_infer`, `_score`; worker entries require actual Windows supervision. The dedicated `_reference` entry is necessary for the separately bounded already-seen reference pass. No training command or callback.
+
+Reference provenance clarification21October: the prospective protocol binds the exact reference/acquisition commands, full reused/intake/evaluator source hashes and resource caps, without future derived artifact hashes. The supervised reference payload records actual command/Job/limits; control pairs its returned index with the terminal native reference result, then binds both into the test-run before claim/acquisition. The reference builder child is below the directory containing `reference.result.json`. The reference pass may precede the scientific claim because it opens only already-seen images. No circular protocol/index/result hashes or unbound evaluator command is allowed.
+
+Steps:
+
+1. Write failing tests for completed development/model/claim bindings, full fixed-policy digest, metadata-only admission, unsafe protocol reads, exclusive test claim before pixels, portable identity, source mutation and failed/partial worker rejection. Observe RED.
+2. Write hand-calculated component/unweighted metrics tests, exact tie abstention, undefined precision/recall, raw missing/foreign/duplicate rows, both-class support and paired bootstrap. Observe RED.
+3. Implement the control/claim hierarchy and exact source/protocol/environment/checkpoint/model/admission/resource bindings. An incomplete fit set, foreign model artifact or failed claim must prevent test acquisition. A failure after claim is preserved and terminal, never silently resumed.
+4. Load only the two frozen selected models with `compile=False, safe_mode=True`; validate input/output shape. Infer without augmentation, batch one, one prefetch; persist ordered raw probabilities and image/model hashes before scoring. Flush partial raw output and preserve it on failure; only complete paired raw artifacts permit comparative scoring.
+5. Compute component-weighted and unweighted accuracy, confusion with Abstain column, per-class precision/recall/F1, macro F1, NLL and coverage. Mean-one component weights and NLL floor 1e-7 match development. Abstentions count as misses; undefined precision/recall is null with support/counts.
+6. Both classes must survive admission. Fix seed 42, 2,000 paired dependency-component bootstrap replicates for MobileNetV2-minus-EfficientNetB0 mean component correctness, 95% percentile indices 49/1949. This is not a macro-F1/precision interval. Fewer than five components containing either class means insufficient support and zero replicates; warn below twenty and flag a degenerate interval.
+7. Run focused GREEN tests and affected integration tests. Any optional supervised saved-model software fixture uses explicit synthetic inputs and is separate from real test claims; no real training or model admission.
+
+## Task 3 — parent verification, fixed protocol and one real attempt
+
+1. Confirm the existing development process is terminal through its original handle plus authoritative completed receipts; independently reproduce raw validation metrics and selections. Preserve all earlier evidence.
+2. Review both implementations with emphasis on indirect graph links, claim-before-pixels, complete exclusions, no model-probability influence on admission, unsafe paths, one-use failure handling, image/label/probability association, resource containment and receipt integrity.
+3. Freeze the separate evaluation protocol/resources/source hashes before any test pixel. Run combined affected research tests and secret/ignore/preservation checks without another ML workload in parallel.
+4. Claim and run exactly one bounded real attempt. Record its specific process handle. An observation timeout is not termination: poll the same handle and actual state, never restart on a missing log update.
+5. Have the control process reconstruct the final admission graph/counts with a separate metadata-only algorithm before inference, without consulting model probabilities; bind that verification receipt before either model worker. Parent review independently audits the same graph and dispositions afterward. Independently reproduce terminal raw metrics and bootstrap. Keep all exclusions/failures and qualification about cleaned-source selection bias.
+6. Update public research/roadmap/handover/completion status with actual conditional findings. Do not present internal source results as IILAS photo/live accuracy, sufficient licence for commercial use, confirmed physical-parcel independence or operational acceptance.
+
+Persistent photo outcomes and bounded live sessions remain other core work after this isolated research increment. Real IILAS intended-use data/evaluation remains necessary even if this internal test improves over the pilot.

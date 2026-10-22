@@ -66,9 +66,23 @@ Reserved units cannot be consumed as freely available stock. If a submission has
 
 1. Create a Draft shipment in **Order and Dispatch** with its recipient, contact, address, expected date and product lines.
 2. In **Warehouse Operations**, start picking, confirm the allocated storage locations and quantities, then confirm packing and parcel count.
-3. Complete the **Prepared-Shipment Handover**. Logistics can then assign the required delivery resources and dispatch the prepared shipment.
+3. Complete the **Prepared-Shipment Handover**. To document the parcel before dispatch, choose it under **Pre-dispatch parcel evidence** in Warehouse Operations. Admin, Manager and Logistics staff can also use this section in Delivery Monitoring. Logistics can then assign the required delivery resources and dispatch the prepared shipment.
 4. During delivery, record status events and upload the required evidence. Submit location updates when appropriate and allow browser location access.
 5. Complete delivery only after the required proof and status conditions are satisfied. Returned goods need warehouse inspection and a separate stock receipt.
+
+For parcel photos, select **Parcel Image**, then choose a JPG, PNG or WebP, or select **Start camera** and **Capture photo**. Review the photo before choosing **Upload evidence**, or discard it and try again. The form shows **Pre-dispatch** for a prepared parcel or **Delivery** for a dispatched shipment. Saved evidence shows its stage, declared source and registration time; older evidence may have no recorded stage. Camera capture time comes from the device clock.
+
+Closing the preview or leaving the module stops the camera. Camera access requires a supported browser on HTTPS or localhost; file selection remains available if camera access fails. AI condition analysis is currently unavailable, and a photo only documents the visible faces of the parcel.
+
+After registering a Parcel Image, eligible staff can select **Request analysis** beside that photo. The saved outcome identifies its image and original stage. Currently this records **Unavailable** because no parcel model has passed acceptance; it does not assign Normal or Damaged. If a response is lost, use **Check outcome** to recover the same request. Approved staff can read historical outcomes after dispatch or reassignment.
+
+For live sessions, choose **Parcel Image**, then **Open live camera**. This opens a local preview. **Start live analysis** is a separate action. Currently it saves **Unavailable** and stops without sending sampled frames because no live parcel model has passed acceptance. **Start camera** remains the separate manual-photo action. Finish or discard a selected photo before opening live analysis.
+
+The live workflow discloses its limits before starting: up to 12 sampled JPEG images over two minutes, retained with the shipment and readable by all Approved shared staff. It records no continuous video or audio. **Stop live analysis**, closing the camera or leaving the foreground stops local sampling; work already transmitted may still need an outcome check. Opening another account or shipment context requires an explicit new start.
+
+If a response is lost, use **Check saved session** or **Stop saved session** to reconcile its original request. These actions do not start replacement inference. Recorded sessions and frames remain historical after reload or stop. Use **Older sessions**, **Newer sessions** or **Latest sessions** to find a saved session, then select **View saved session**. Authorised staff can inspect retained frames; a frame describes only the visible packaging and cannot establish hidden-face or internal condition.
+
+When an evaluated model becomes available, every predicted condition will require Admin/Manager review. **Abstained** keeps the AI label empty and requires inspection notes. Results never approve a shipment or change stock automatically. Real-model quality and physical-camera evaluation remain incomplete.
 
 ## Understanding results
 

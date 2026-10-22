@@ -1,5 +1,18 @@
 # IILAS project structure
 
+## Current MSI workspace — 21 October 2026
+
+The complete local workspace is `C:/Users/Home/OneDrive/Documents/FYP CWK project full`. Keep this folder together:
+
+- `iilas-fyp/`: executable application and the only Git checkout; run Git/npm commands here. Origin is the private `WaikinC/iilas-fyp` repository.
+- `fyp-cwk-2/`: both original report portfolios, documentation/handover and 23 saved skill packages.
+- `private-config/`: local configuration and preserved historical emulator snapshot; never display its values or upload it.
+- Root `Enter-IILAS.ps1` and `Start-IILAS.ps1`: toolchain selection and local App/Emulators startup. Dot-source Enter-IILAS before terminal work; use Node22.13+within22, JDK21 and `npm.cmd`/`npx.cmd`.
+
+Research Python is `C:/Users/Home/.venvs/iilas-fyp/Scripts/python.exe`. Datasets, models, private labels/results, emulator exports and recovery archives remain local and ignored. The outer workspace and report archive must not become a second Git repository or a whole-bundle upload. Local browser checks use literal `http://127.0.0.1:5173` or `http://localhost:5173`; hostname/LAN URLs choose different Firebase endpoints. Reuse the configured loopback emulators sequentially without starting a duplicate stack.
+
+The laptop paths below are historical descriptions retained for provenance; use the current MSI paths and root `MSI_SETUP_STATUS.md` for recovery.
+
 The executable project is `C:/Users/choon/Documents/FYP/FYP`. Its tracked application files are published at `WaikinC/iilas-fyp`. GitHub starts at the contents of that folder; it does not add another `FYP` wrapper directory.
 
 `C:/Users/choon/Documents/ChatGPT/fyp cwk 2` is a separate documentation archive containing saved reports, source links, skill packages and Markdown snapshots. It is not another application checkout, so its top-level folders differ from the application repository.

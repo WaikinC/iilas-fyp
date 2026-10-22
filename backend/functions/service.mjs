@@ -3,15 +3,19 @@ import {getStorage} from 'firebase-admin/storage';
 import {createHash, randomUUID} from 'node:crypto';
 import {locationBalances,applyLocationMovement,allocateLocations,correctionMovement} from './locationStock.js';
 import {canonicalRecord} from './integrity.js';
+import {canUploadEvidence,validateEvidenceCapture} from './parcelEvidence.js';
 import {validateProduct, validateShipment, validateStockMovement, validateStockRequest, validateWarehouseStep} from './validation.js';
 import {validateSupplier,validatePurchaseCommand,inputText,inputNumber,supplierIdentity,onlyFields} from './procurementValidation.js';
+import {startParcelAnalysis,resolveParcelAnalysis,reviewParcelAnalysis,reviewLinkedParcelPrediction} from './parcelAnalysis.mjs';
+import {startParcelLiveSession,reserveParcelLiveFrame,analyseParcelLiveFrame,resolveParcelLiveSession,resolveParcelLiveFrame,stopParcelLiveSession,reviewParcelLiveFrame} from './parcelLive.mjs';
+import {runParcelLiveOperation,guardParcelLiveTransaction} from './parcelLiveDeadline.mjs';
 
 import {registerAccount,updateAccount,approvedScope,approvedTransaction} from './access.mjs';
 const permissions = {
   products:['Admin','Manager','Inventory'], stock:['Admin','Manager','Inventory','Warehouse'],
   warehouse:['Admin','Manager','Warehouse'], shipments:['Admin','Manager','Logistics'],
   procurement:['Admin','Manager','Inventory'], approve:['Admin','Manager'], fleet:['Admin','Manager','Logistics'],
-  delivery:['Admin','Manager','Logistics','Driver'], admin:['Admin'], reports:['Admin','Manager'],
+  delivery:['Admin','Manager','Logistics','Driver'], evidence:['Admin','Manager','Warehouse','Logistics','Driver'], admin:['Admin'], reports:['Admin','Manager'],
 };
 const fail=(message,code='failed-precondition')=>{ const error=new Error(message); error.code=code; throw error; };
 const text=(value,label,max=120,min=1)=>inputText(value,label,max,min,true);
@@ -126,9 +130,10 @@ async function approval(auth,scope,input){
 }
 async function save(auth,scope,input){
   const kind=input.kind;if(!['products','shipments'].includes(kind))fail('Invalid record kind.');
-  const data=kind==='products'?validateProduct(input.data):validateShipment(input.data,100);
   const key=input.existing?.id?id(input.existing.id):randomUUID();
   return run(auth,scope,kind,async(tx,s,actor)=>{
+    // Each retry needs fresh data because shipment items are enriched below.
+    const data=kind==='products'?validateProduct(input.data):validateShipment(input.data,100);
     const recordRef=ref(kind,key),snap=await tx.get(recordRef),old=snap.exists?scoped(snap,s):null;
     if(input.existing){if(!old)fail('Record not found.');expect(old,input.existing.version);}
     const newKeys=kind==='products'?[`${s}_sku_${data.sku}`,`${s}_barcode_${data.barcode}`]:[`${s}_shipment_${data.reference}`];
@@ -429,21 +434,28 @@ async function location(auth,scope,input){
 }
 async function registerEvidence(auth,scope,input){
   const key=id(input.id),shipmentId=id(input.shipmentId),path=`evidence/${id(scope)}/${shipmentId}/${key}`;
-  if(input.path!==path||!['Proof of Delivery','Parcel Image'].includes(input.type))fail('Invalid evidence path or type.');
-  // Read permission before downloading bytes; permission is checked again in the write transaction.
-  const membership=(await ref('users',auth.uid).get()).data();
-  if(!membership?.active||!permissions.delivery.includes(membership.role))fail('Evidence access denied.','permission-denied');
+  if(input.path!==path)fail('Invalid evidence path.');
+  const capture=validateEvidenceCapture(input);
+  const authorize=async(tx,s,actor,member)=>{
+    const shipment=scoped(await tx.get(ref('shipments',shipmentId)),s);
+    const plan=member.role==='Driver'?scoped(await tx.get(ref('transportPlans',shipmentId)),s):null;
+    if(!canUploadEvidence({role:member.role,shipmentStatus:shipment.status,stage:capture.stage,actorUid:actor,assignedDriverUid:plan?.driverUid}))fail('Evidence stage, shipment status or assignment no longer permits this upload.','permission-denied');
+    return shipment;
+  };
+  // Snapshot current scope, approval, role, status and assignment before any
+  // object access. Repeat the same checks in the transaction that writes.
+  await run(auth,scope,'evidence',authorize);
   const object=getStorage().bucket(process.env.EVIDENCE_BUCKET || 'fyp-inventory-and-logistics.firebasestorage.app').file(path),[metadata]=await object.getMetadata();
   const bytes=number(metadata.size,'evidence size',1,10*1024*1024,true);
-  if(metadata.metadata?.actor!==auth.uid||!['image/jpeg','image/png','image/webp','application/pdf'].includes(metadata.contentType)||input.type==='Parcel Image'&&!metadata.contentType.startsWith('image/'))fail('Invalid evidence object.');
+  const declared=metadata.metadata;
+  if(declared?.actor!==auth.uid||declared.stage!==capture.stage||declared.evidenceType!==capture.type||declared.captureSource!==capture.captureSource||(declared.capturedAtClient||'')!==(capture.capturedAtClient||''))fail('Evidence capture metadata does not match the upload.');
+  if(!['image/jpeg','image/png','image/webp','application/pdf'].includes(metadata.contentType)||capture.type==='Parcel Image'&&!metadata.contentType.startsWith('image/'))fail('Invalid evidence object.');
   const [buffer]=await object.download();if(buffer.length!==bytes)fail('Evidence size changed.');
   const digest=hash(buffer);
-  return run(auth,scope,'delivery',async(tx,s,actor,member)=>{
-    const shipment=scoped(await tx.get(ref('shipments',shipmentId)),s),plan=(await tx.get(ref('transportPlans',shipmentId))).data(),existing=await tx.get(ref('evidence',key));
+  return run(auth,scope,'evidence',async(tx,s,actor,member)=>{
+    const shipment=await authorize(tx,s,actor,member),existing=await tx.get(ref('evidence',key));
     if(existing.exists)fail('Evidence is already registered.');
-    if(shipment.status!=='Dispatched')fail('Evidence belongs to a dispatched shipment.');
-    if(member.role==='Driver'&&plan?.driverUid!==actor)fail('Delivery is not assigned to you.','permission-denied');
-    tx.set(ref('evidence',key),{ownerId:s,shipmentId,path,name:text(input.name,'Evidence filename',180),type:input.type,contentType:metadata.contentType,bytes,sha256:digest,actor,createdAt:now(),version:1});
+    tx.set(ref('evidence',key),{ownerId:s,shipmentId,path,name:text(input.name,'Evidence filename',180),...capture,shipmentVersionAtRegistration:shipment.version,integrityVersion:2,contentType:metadata.contentType,bytes,sha256:digest,actor,createdAt:now(),version:1});
     audit(tx,s,actor,'evidence',key,'Submit',1,`${input.type}: ${shipment.reference}`);
     return {id:key,sha256:digest};
   });
@@ -492,6 +504,7 @@ async function registerVerification(auth,scope,input){
   });
 }
 async function predict(auth,scope,input){
+  if(input.kind==='parcel')fail('Use the registered evidence parcel analysis workflow to request and recover a parcel outcome.');
   const kind=input.kind,permission=kind==='inventory'?'products':'delivery';
   if(!['inventory','delivery','parcel'].includes(kind))fail('Choose an inference workflow.');
   const key=id(input.id),recordKind=kind==='inventory'?'products':kind==='parcel'?'evidence':'shipments';
@@ -515,26 +528,24 @@ async function predict(auth,scope,input){
   });
   if(!process.env.RESEARCH_API_URL||!process.env.RESEARCH_API_TOKEN)fail('Research inference is unavailable until labelled datasets, evaluated models, and the Python service are configured.','unavailable');
   const payload={kind,features:source.features||{}};
-  if(kind==='parcel'){
-    const [bytes]=await getStorage().bucket(process.env.EVIDENCE_BUCKET||'fyp-inventory-and-logistics.firebasestorage.app').file(source.path).download();
-    if(hash(bytes)!==source.sha256)fail('Evidence bytes no longer match the registered SHA-256 hash.');payload.imageBase64=bytes.toString('base64');
-  }
   const response=await fetch(`${process.env.RESEARCH_API_URL.replace(/\/$/,'')}/predict`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.RESEARCH_API_TOKEN}`},body:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
   if(!response.ok)fail('An evaluated model is not available. Check the research service and labelled training data.','unavailable');
   const result=await response.json(),classes=kind==='inventory'?['Normal','Reorder Risk','Critical Stock Risk']:kind==='delivery'?['Low','Medium','High']:['Normal','Damaged'];
   if(!classes.includes(result.label)||!result.modelVersion)fail('The research service returned an invalid prediction.');
   const confidence=number(result.confidence,'confidence',0,1);
-  return run(auth,scope,permission,async(tx,s,actor)=>{
+  return run(auth,scope,permission,async(tx,s,actor,member)=>{
     const record=scoped(await tx.get(ref(recordKind,key)),s);expect(record,source.version);
+    if(member.role==='Driver'&&(recordKind==='evidence'?(await tx.get(ref('transportPlans',record.shipmentId))).data()?.driverUid:record.driverUid)!==actor)fail('Inference is limited to assigned deliveries.','permission-denied');
     if(kind==='delivery'&&((await tx.get(ref('deliveries',key))).data()?.version||0)!==source.deliveryVersion)fail('Delivery events changed during inference. Request a fresh analysis.');
-    const predictionId=randomUUID();tx.set(ref('predictions',predictionId),{ownerId:s,kind,recordId:key,sourceVersion:source.version,label:result.label,confidence,model:text(result.model,'Model',80),modelVersion:text(result.modelVersion,'Model version',128),features:source.features||{},globalFeatureImportance:result.globalFeatureImportance||{},evidenceSha256:source.sha256||null,reviewStatus:'Pending',humanReviewRequired:true,actor,createdAt:now(),version:1});
+    const predictionId=randomUUID();tx.set(ref('predictions',predictionId),{ownerId:s,kind,recordId:key,sourceVersion:source.version,label:result.label,confidence,model:text(result.model,'Model',80),modelVersion:text(result.modelVersion,'Model version',128),features:source.features||{},globalFeatureImportance:kind==='parcel'?{}:result.globalFeatureImportance||{},evidenceSha256:source.sha256||null,reviewStatus:'Pending',humanReviewRequired:true,actor,createdAt:now(),version:1});
     audit(tx,s,actor,'predictions',predictionId,'Predict',1,`${kind}: ${result.label}`);return {id:predictionId};
   });
 }
 async function reviewPrediction(auth,scope,input){
-  return run(auth,scope,'reports',async(tx,s,actor)=>{
+  return run(auth,scope,'reports',async(tx,s,actor,member)=>{
     const key=id(input.id),prediction=scoped(await tx.get(ref('predictions',key)),s);expect(prediction,input.version);
     if(prediction.reviewStatus!=='Pending'||!['Accept','Reject'].includes(input.decision))fail('Choose a pending prediction and review decision.');
+    if(prediction.analysisId){await reviewLinkedParcelPrediction(tx,key,prediction,input,actor,member.role);return {id:key};}
     const notes=text(input.notes,'Human review notes',500,3);
     tx.update(ref('predictions',key),{reviewStatus:input.decision==='Accept'?'Accepted':'Rejected',reviewNotes:notes,reviewedBy:actor,reviewedAt:now(),version:prediction.version+1});
     audit(tx,s,actor,'predictions',key,'Review',prediction.version+1,input.decision);return {id:key};
@@ -547,9 +558,21 @@ export async function executeCommand(auth,request){
   if(typeof action!=='string'||!input||typeof input!=='object'||Array.isArray(input))fail('Invalid command action or input.');
   if(action==='registerAccount')return registerAccount(auth,input);
   if(action==='updateAccount')return updateAccount(auth,input);
-  const handlers={save,remove,stock,resolveStock,approval,warehouse,cancelWarehouse,entity,purchaseOrder,planTransport,cancelTransport,delivery,location,registerEvidence,fleetEvent,prepareVerification,registerVerification,predict,reviewPrediction};
+  const handlers={save,remove,stock,resolveStock,approval,warehouse,cancelWarehouse,entity,purchaseOrder,planTransport,cancelTransport,delivery,location,registerEvidence,fleetEvent,prepareVerification,registerVerification,predict,reviewPrediction,startParcelAnalysis,resolveParcelAnalysis,reviewParcelAnalysis,startParcelLiveSession,reserveParcelLiveFrame,analyseParcelLiveFrame,resolveParcelLiveSession,resolveParcelLiveFrame,stopParcelLiveSession,reviewParcelLiveFrame};
   if(!Object.hasOwn(handlers,action))fail('Unknown command.');
-  const scope=await approvedScope(auth);
-  if(request.workspaceId&&request.workspaceId!==scope)fail('The system data source cannot be changed by a client.','permission-denied');
-  return handlers[action](auth,scope,input);
+  const liveActions=['startParcelLiveSession','reserveParcelLiveFrame','analyseParcelLiveFrame','resolveParcelLiveSession','resolveParcelLiveFrame','stopParcelLiveSession','reviewParcelLiveFrame'];
+  const dispatch=async()=>{
+    const scope=await approvedScope(auth,liveActions.includes(action)?guardParcelLiveTransaction:undefined);
+    if(request.workspaceId&&request.workspaceId!==scope)fail('The system data source cannot be changed by a client.','permission-denied');
+    return handlers[action](auth,scope,input);
+  };
+  if(!liveActions.includes(action))return dispatch();
+  try{return await runParcelLiveOperation(dispatch);}
+  catch(error){
+    if(error?.liveSafe===true)throw error;
+    // Initial approval lookup happens before the handler's safe wrapper. Never
+    // forward a database/service exception from that live-only boundary.
+    if(error?.code==='permission-denied')fail('Your account cannot perform this live parcel operation.','permission-denied');
+    fail('Live parcel access could not be verified. Resolve the same saved operation before trying again.','unavailable');
+  }
 }

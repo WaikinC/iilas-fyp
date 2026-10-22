@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Synthetic parcel frame encoder fixture</title>
+<p>Synthetic canvas video only. No physical camera, evidence upload or inference.</p>
+<script type="module">
+  import {captureParcelLiveFrame} from '/src/features/operations/parcelLiveCapture.ts';
+  window.runCaptureFixture = async () => {
+    const results = [];
+    for (const [width, height] of [[1920, 1080], [1080, 1920], [320, 180]]) {
+      const source = document.createElement('canvas');
+      source.width = width;
+      source.height = height;
+      const context = source.getContext('2d');
+      context.fillStyle = '#152044';
+      context.fillRect(0, 0, width, height);
+      context.fillStyle = '#ba9366';
+      context.fillRect(width / 4, height / 4, width / 2, height / 2);
+      const stream = source.captureStream(10);
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+      document.body.append(video);
+      try {
+        await video.play();
+        if (video.readyState < 2) throw new Error('Synthetic stream did not become ready');
+        const result = await captureParcelLiveFrame(video, {
+          signal: new AbortController().signal,
+          isCurrent: () => stream.getTracks().every(track => track.readyState === 'live'),
+        });
+        const bitmap = await createImageBitmap(result.payload.blob);
+        results.push({
+          source: {width, height},
+          payload: {width: result.payload.width, height: result.payload.height},
+          encoded: {width: bitmap.width, height: bitmap.height},
+          type: result.payload.blob.type,
+          bytes: result.bytes,
+          capturedAtClient: result.capturedAtClient,
+        });
+        bitmap.close();
+      } finally {
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+        video.remove();
+        source.width = 0;
+        source.height = 0;
+      }
+    }
+    return results;
+  };
+</script>
+</html>
