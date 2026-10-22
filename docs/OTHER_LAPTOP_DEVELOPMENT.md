@@ -2,7 +2,7 @@
 
 The private `WaikinC/iilas-fyp` repository contains the application, shared contracts, research source and software checks. The separate report archive, private configuration, emulator records, parcel images and trained weights stay on MSI. A clone is sufficient for application development; it does not reproduce MSI's local model or data.
 
-The 22 October source checkpoint excludes the new, unfinished local experimental camera integration. The application build passes, and lint reports six warnings with no errors. A broader isolated research run encountered native-worker failures in `test_parcel_runtime.py` (two failures and three errors observed); their cause is unresolved. This development checkpoint does not certify the complete research suite or parcel-camera readiness. Historical verification records retain their original scope and dates.
+The 22 October source checkpoint excludes the new, unfinished local experimental camera integration. The application build passes, and lint reports six warnings with no errors. The complete isolated research run executed 47 test files: 45 passed and two failed (`test_parcel_runtime.py` and `test_parcel_warm_runtime.py`). These native-worker failures remain unresolved. This development checkpoint does not certify the complete research suite or parcel-camera readiness. Historical verification records retain their original scope and dates.
 
 Use your normal GitHub account authentication. Do not paste access tokens into commands or commit configuration from MSI.
 
