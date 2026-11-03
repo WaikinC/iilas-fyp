@@ -1,9 +1,10 @@
+import{createFixtureBusinessRecord,fixtureCreationData}from'./record-creation-fixtures.mjs';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {collection,doc,getDoc,getDocs,setDoc,updateDoc,deleteDoc} from 'firebase/firestore';
 import {admin,client,scope,suffix,barcode,fixtureDB,snapshot,close} from './access-test-client.mjs';
 const inventory=await client('Inventory'),warehouse=await client('Warehouse'),viewer=await client('Viewer');
-const {id:productId}=await admin.call('save',{kind:'products',data:{name:`Retry pump ${suffix}`,sku:`RETRY-${suffix}`,barcode:barcode(),category:'Pump',location:'A-01',reorderLevel:3,quantityOnHand:20,reservedQuantity:0,status:'Active',imageDataUrl:''}});
+const {id:productId}=await createFixtureBusinessRecord(admin,'products',fixtureCreationData('products',{name:`Retry pump ${suffix}`,sku:`RETRY-${suffix}`,barcode:barcode(),category:'Pump',location:'A-01',reorderLevel:3,quantityOnHand:20,reservedQuantity:0,status:'Active',imageDataUrl:''}));
 const receiptId=(actor,operationId)=>createHash('sha256').update(JSON.stringify([scope,actor,operationId])).digest('hex');
 const command=(type,quantity,extra={})=>({productId,type,quantity,reference:`RETRY-${suffix}`,reason:'Count independently checked',operationId:randomUUID(),...extra});
 const counts=async()=>({movements:(await fixtureDB.collection('stockMovements').where('productId','==',productId).get()).size,approvals:(await fixtureDB.collection('approvals').where('productId','==',productId).get()).size,audits:(await fixtureDB.collection('auditLogs').where('recordId','==',productId).get()).size});

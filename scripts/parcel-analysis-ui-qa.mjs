@@ -2,11 +2,12 @@
 // Production code has no test flag, accepted-model override or injected handler.
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {createParcelEvaluationOutput} from './parcel-evaluation-output.mjs';
 const require=createRequire(import.meta.url);
 const {chromium}=require(process.env.IILAS_PLAYWRIGHT_MODULE||'C:/Users/Home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
-const output=resolve('outputs/parcel-photo-outcomes-20261021');await mkdir(output,{recursive:true});
+const output=await createParcelEvaluationOutput('photo-ui');
 const browser=await chromium.launch({channel:'msedge',headless:true});
 const results=[];
 try {
@@ -79,5 +80,10 @@ try {
   await page.evaluate(()=>window.uiQA.publishPredictions([{id:'legacy-long',kind:'parcel',label:'Damaged',model:'Historical model',modelVersion:'v1',confidence:0.75,reviewStatus:'Pending',version:1}]));await page.getByLabel('Review notes',{exact:true}).fill('');await page.getByLabel('Review notes',{exact:true}).pressSequentially('u'.repeat(501));assert.equal((await page.getByLabel('Review notes',{exact:true}).inputValue()).length,500,'unlinked historical review preserves its 500-character limit');await button('Record review').click();assert.equal(await page.evaluate(()=>window.uiQA.calls.at(-1).input.notes.length),500);
   await page.evaluate(()=>window.uiQA.publishPredictions([{id:'linked-long',analysisId:'analysis',kind:'parcel',label:'Damaged',model:'MobileNetV2',modelVersion:'v1',confidence:0.75,reviewStatus:'Pending',version:1}]));await page.getByLabel('Review notes',{exact:true}).fill('');await page.getByLabel('Review notes',{exact:true}).pressSequentially('l'.repeat(241));assert.equal((await page.getByLabel('Review notes',{exact:true}).inputValue()).length,240,'linked historical review prevents typing beyond the parcel command limit');await button('Record review').click();assert.equal(await page.evaluate(()=>window.uiQA.calls.at(-1).input.notes.length),240);results.push('parcel and linked reviews enforce 240 typed characters while unlinked history retains 500');
   assert.deepEqual(errors,[]);results.push('390/320px component layout stays within viewport');
-  await writeFile(resolve(output,'ui-component-results.json'),JSON.stringify({results,errors},null,2));console.log(JSON.stringify({passed:results.length,results},null,2));
+  await load();await button('Manager fixture').click();await page.evaluate(()=>{const q=window.uiQA,r=q.inference('Predicted');r.model={...r.model,acceptanceSha256:null,evaluationKind:'local-experimental',evaluationManifestSha256:'f'.repeat(64)};q.publish([r]);});
+  await page.getByText(/Local experimental observation/).waitFor();await page.getByLabel('Parcel review notes').fill('Experimental visible packaging inspected');await button('Record human review').click();await page.getByText('Review: Accepted',{exact:true}).waitFor();assert.equal(await page.getByText(/Local experimental observation/).count(),1);
+  const experimental=await page.evaluate(()=>({...window.uiQA.records[0],version:3,reviewStatus:'Accepted',updatedAt:3000,reviewedBy:'actor',reviewedAt:3000,reviewNotes:'Experimental visible packaging inspected',humanReviewRequired:false}));await load();await page.evaluate(record=>window.uiQA.publish([record]),experimental);await page.getByText('Review: Accepted',{exact:true}).waitFor();await page.getByText(/Local experimental observation/).waitFor();await page.getByText('Model and result provenance',{exact:true}).click();await page.getByText('No operational acceptance',{exact:true}).waitFor();
+  for(const width of [390,320]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:resolve(output,`experimental-${width}.png`),fullPage:true});}
+  await load('?view=research');await page.evaluate(()=>window.uiQA.publishPredictions([{id:'experiment',analysisId:'analysis',kind:'parcel',recordId:'evidence',label:'Damaged',model:'MobileNetV2',modelVersion:'f'.repeat(64),confidence:0.8,reviewStatus:'Accepted',version:2,evaluationKind:'local-experimental',evaluationManifestSha256:'f'.repeat(64),acceptanceSha256:null}]));await page.getByText(/Local experimental observation/).waitFor();assert.equal(await button('Record review').count(),0);results.push('false/null experimental provenance remains visible after Accepted review and reload on photo and research screens, including narrow layouts');
+  await writeFile(resolve(output,'ui-component-results.json'),JSON.stringify({results,errors},null,2),{flag:'wx'});console.log(JSON.stringify({passed:results.length,results},null,2));
 } finally {await browser.close();}

@@ -1,0 +1,15 @@
+export type MobileAction='tracking.start'|'tracking.renew'|'tracking.stop'|'tracking.points'|'delivery.update'|'evidence.prepare'|'evidence.finalise';
+export type MobileRequest={protocol:'mobile-command-1.0';operationId:string;action:MobileAction;payloadJson:string};
+export type MobileResult={protocol:'mobile-command-1.0';operationId:string;action:MobileAction;requestSha256:string;state:'Pending'|'Committed'|'Cancelled'|'Rejected';recordId:string|null;version:number|null;reason:string|null;replayed:boolean;data:Record<string,unknown>|null};
+export type MobileShipment={id:string;reference:string;recipient:string;address:string;expectedDelivery:string;shipmentVersion:number;deliveryVersion:number;status:string;assignmentVersion:number;proofs:{id:string;name:string}[]};
+export const MOBILE_PROTOCOL:'mobile-command-1.0';
+export const MOBILE_LIMITS:Readonly<Record<string,number>>;
+export const MOBILE_ACTIONS:readonly MobileAction[];
+export function mobileHash(value:string):string;
+export function validateMobileRequest(raw:unknown):MobileRequest;
+export function parseMobilePayload(raw:unknown):Record<string,unknown>;
+export function validateMobileResult(raw:unknown,request:MobileRequest):MobileResult;
+export function shouldReplaceLatest(incoming:{capturedAtMs:number},existing:unknown):boolean;
+export function validateMobileShipment(raw:unknown):MobileShipment;
+export function validateMobilePage(raw:unknown):{items:MobileShipment[];cursor:string|null;verifiedAtMs:number};
+export function validateBridgeEvent(raw:unknown):{version:number;pending:number;tracking:string};

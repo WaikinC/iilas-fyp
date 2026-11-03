@@ -188,13 +188,16 @@ async function acceptedWorker(){
     assert.equal(reviews.filter(r=>r.status==='fulfilled').length,1);
     const a=await read(`parcelAnalyses/${saved.analysisId}`),p=await read(`predictions/${saved.predictionId}`);assert.equal(a.reviewStatus,p.reviewStatus);assert.equal(a.version,3);assert.equal(p.version,2);assert.equal(a.label,saved.label);reset();
   });
-  await check('legacy unlinked prediction review preserved; Abstained review never creates human label',async()=>{
+  await check('legacy unlinked Accept denied unchanged and clean Reject preserved; Abstained review never creates human label',async()=>{
     const f=await fixture();fetchWork=async()=>response({status:'abstained',label:null,probabilities:[0.5,0.5],confidence:0.5});const saved=await start(f);assert.equal(saved.state,'Abstained');
     await denied(()=>command(f,'reviewParcelAnalysis',{analysisId:saved.analysisId,version:2,decision:'Reviewed',notes:'Image inspected manually'},f.viewer));
     const reviewed=await command(f,'reviewParcelAnalysis',{analysisId:saved.analysisId,version:2,decision:'Reviewed',notes:'Image inspected manually'},f.reviewer);assert.equal(reviewed.label,null);assert.equal(reviewed.predictionId,null);assert.equal(reviewed.reviewStatus,'Reviewed');assert.equal((await ownedRows(f,'predictions')).length,0);
     const legacy=`${f.base}-legacy`;f.references.push(await put(`predictions/${legacy}`,{ownerId:scope,kind:'parcel',recordId:f.photo,label:'Normal',reviewStatus:'Pending',version:1,actor:f.actor}));
-    await command(f,'reviewPrediction',{id:legacy,version:1,decision:'Accept',notes:'Historical result inspected'},f.reviewer);
-    const old=await read(`predictions/${legacy}`);assert.equal(old.reviewStatus,'Accepted');assert.equal(Object.hasOwn(old,'analysisId'),false);assert.equal((await ownedRows(f,'parcelAnalyses')).length,1);reset();
+    const legacyBefore=await read(`predictions/${legacy}`);
+    await assert.rejects(command(f,'reviewPrediction',{id:legacy,version:1,decision:'Accept',notes:'Historical result inspected'},f.reviewer),error=>error.code==='failed-precondition'&&/reciprocal registered-photo/.test(error.message));
+    assert.deepEqual(await read(`predictions/${legacy}`),legacyBefore);
+    await command(f,'reviewPrediction',{id:legacy,version:1,decision:'Reject',notes:'Historical result rejected'},f.reviewer);
+    const old=await read(`predictions/${legacy}`);assert.equal(old.reviewStatus,'Rejected');assert.equal(Object.hasOwn(old,'analysisId'),false);assert.equal((await ownedRows(f,'parcelAnalyses')).length,1);reset();
   });
   await check('Admin linked legacy review accepts both records without changing inference',async()=>{
     const f=await fixture();await db.doc(`users/${f.reviewer}`).update({role:'Admin'});const saved=await start(f);
@@ -237,6 +240,7 @@ async function liveRulesAndHttp(){
         await denied(()=>setDoc(doc(c.db,kind,key),{ownerId:scope}));await denied(()=>updateDoc(doc(c.db,kind,key),{state:'Predicted'}));await denied(()=>deleteDoc(doc(c.db,kind,key)));
       }
       for(const c of [admin,viewer,pending,disabled]){await denied(()=>setDoc(doc(c.db,'parcelAnalyses',`${f.base}-forged`),{ownerId:scope,state:'Predicted',label:'Normal'}));await denied(()=>updateDoc(doc(c.db,'parcelAnalyses',f.saved.analysisId),{label:'Normal'}));await denied(()=>deleteDoc(doc(c.db,'parcelAnalyses',f.saved.analysisId)));}
+      for(const c of [admin,viewer,pending,disabled]){await denied(()=>setDoc(doc(c.db,'parcelAnalyses',f.base+'-experimental-forged'),{ownerId:scope,state:'Predicted',label:'Damaged',model:{evaluationKind:'local-experimental',evaluationManifestSha256:'f'.repeat(64),acceptanceSha256:null}}));await denied(()=>updateDoc(doc(c.db,'parcelAnalyses',f.saved.analysisId),{model:{evaluationKind:'local-experimental',evaluationManifestSha256:'f'.repeat(64),acceptanceSha256:null}}));}
       assert.equal((await getDoc(doc(viewer.db,'parcelAnalyses',f.saved.analysisId))).data().state,'Unavailable');
       assert((await getDocs(query(collection(viewer.db,'parcelAnalyses'),where('ownerId','==',scope)))).docs.some(row=>row.id===f.saved.analysisId));
       await denied(()=>getDocs(collection(viewer.db,'parcelAnalyses')));

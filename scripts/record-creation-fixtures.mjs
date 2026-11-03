@@ -1,0 +1,6 @@
+// Explicit, fictional loopback fixtures. Not a production command compatibility shim.
+import assert from'node:assert/strict';import{randomUUID}from'node:crypto';
+function guard(){assert.equal(process.env.FIRESTORE_EMULATOR_HOST,'127.0.0.1:8081');assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST,'127.0.0.1:9099');assert.equal(process.env.GCLOUD_PROJECT,'fyp-inventory-and-logistics');assert.equal(process.env.GOOGLE_CLOUD_PROJECT,'fyp-inventory-and-logistics');assert(!process.env.GOOGLE_APPLICATION_CREDENTIALS&&!process.env.FIREBASE_TOKEN);}
+export function fixtureCreationData(kind,data){const copy={...data};delete copy[kind==='products'?'sku':'reference'];return copy;}
+export async function createFixtureBusinessRecord(client,kind,data){guard();assert(!Object.hasOwn(data,kind==='products'?'sku':'reference'));const result=await client.call('createBusinessRecord',{operationId:randomUUID(),kind,data});assert.equal(result.state,'Created');return{...result,id:result.recordId};}
+export async function createLegacyFixture(db,path,data,registered){guard();assert(registered instanceof Set&&registered.has(path),'Register the exact legacy path before creating it');assert(!(await db.doc(path).get()).exists);await db.doc(path).create(data);}

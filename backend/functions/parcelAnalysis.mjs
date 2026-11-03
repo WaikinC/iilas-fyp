@@ -4,7 +4,9 @@ import {createHash,randomUUID} from 'node:crypto';
 import {approvedTransaction,ROLES} from './access.mjs';
 import {parcelAcceptance} from './parcelAcceptance.mjs';
 import {requireParcelAcceptance,validateParcelResponse} from './parcelResponse.mjs';
-import {validateStartParcelAnalysis,validateResolveParcelAnalysis,validateParcelAnalysisReview,canStartParcelAnalysis,createRunningParcelAnalysis,finishParcelAnalysis,toPublicParcelAnalysis,matchesParcelAnalysisClaim,reviewParcelAnalysis as applyReview} from './parcelAnalysis.js';
+import {selectParcelLocalEvaluationModel,assertParcelLocalEvaluationAuthority,isParcelLocalEvaluationModel} from './parcelLocalEvaluation.mjs';
+import {validateParcelLocalEvaluationResponse} from './parcelLocalEvaluationResponse.mjs';
+import {validateStartParcelAnalysis,validateResolveParcelAnalysis,validateCleanupParcelAnalysis,validateParcelAnalysisReview,canStartParcelAnalysis,createRunningParcelAnalysis,finishParcelAnalysis,toPublicParcelAnalysis,matchesParcelAnalysisClaim,reviewParcelAnalysis as applyReview} from './parcelAnalysis.js';
 
 const db=()=>getFirestore();
 const ref=(kind,id)=>db().collection(kind).doc(id);
@@ -12,6 +14,7 @@ const hash=value=>createHash('sha256').update(value).digest('hex');
 const digest=value=>hash(JSON.stringify(value));
 // Firestore map ordering is not an identity boundary. Arrays retain order.
 const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+const modelDigest=model=>digest(canonical(model));
 const same=(a,b)=>JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
 const fail=(message='Parcel analysis could not be completed.',code='failed-precondition')=>{const error=new Error(message);error.code=code;error.parcelSafe=true;throw error;};
 const problem=reasonCode=>{const error=new Error('Parcel analysis resource failed.');error.reasonCode=reasonCode;return error;};
@@ -25,8 +28,9 @@ function acceptedModel(){
   try{
     const pin=requireParcelAcceptance(parcelAcceptance);
     return {model:pin.model,modelVersion:pin.modelVersion,selectionSha256:pin.selectionSha256,evaluationSha256:pin.evaluationSha256,acceptanceSha256:pin.acceptanceSha256,preprocessing:pin.preprocessing,contrast:pin.contrast,classOrder:['Normal','Damaged']};
-  }catch{return null;}
+  }catch{return selectParcelLocalEvaluationModel('registered-photo');}
 }
+function localAuthority(model){try{assertParcelLocalEvaluationAuthority(model);}catch{fail('Local experimental parcel evaluation is unavailable.','unavailable');}}
 function contextSnapshot(config,account,evidence,shipment,plan){
   return {
     config:{dataScopeId:config.dataScopeId,version:config.version??null},
@@ -65,7 +69,7 @@ async function claim(auth,scope,input){
     const commandHash=digest(input);
     if(old){
       if(old.ownerId!==scope||old.actorUid!==auth.uid||old.operationId!==input.operationId||old.commandHash!==commandHash||old.evidenceId!==input.evidenceId)fail('This operation ID belongs to a different parcel request.');
-      if(old.state==='Blocked')return {result:busy(old.analysisId)};
+      if(old.state==='Blocked'){const blocking=scoped(await tx.get(ref('parcelAnalyses',old.analysisId)),scope);localAuthority(blocking.model);return {result:busy(old.analysisId)};}
       const record=scoped(await tx.get(ref('parcelAnalyses',old.analysisId)),scope);
       return {result:await savedOutcome(tx,record)};
     }
@@ -77,6 +81,7 @@ async function claim(auth,scope,input){
       // Even an expired claim must be explicitly resolved. Replaying this
       // operation can never become a claim after the blocker disappears.
       const blocking=scoped(await tx.get(ref('parcelAnalyses',lock.analysisId)),scope);
+      localAuthority(blocking.model);
       if(lock.ownerId!==scope||lock.evidenceId!==input.evidenceId||blocking.evidenceId!==input.evidenceId)fail();
       tx.create(receiptRef,{ownerId:scope,actorUid:auth.uid,...input,commandHash,state:'Blocked',analysisId:lock.analysisId,createdAt:Date.now()});
       return {result:busy(lock.analysisId)};
@@ -84,18 +89,19 @@ async function claim(auth,scope,input){
     const analysisId=randomUUID(),nonce=randomUUID(),model=acceptedModel(),createdAt=Date.now();
     const record=createRunningParcelAnalysis({ownerId:scope,analysisId,actorUid:auth.uid,...input,shipmentId:evidence.shipmentId,evidenceVersion:evidence.version,evidenceSha256:evidence.sha256,stage:evidence.stage,shipmentVersion:shipment.version,captureSource:evidence.captureSource,capturedAtClient:evidence.capturedAtClient??null,model},createdAt);
     const coordinates={ownerId:scope,evidenceId:input.evidenceId,analysisId,receiptKey,nonce,expiresAt:record.expiresAt};
-    const receipt={...coordinates,actorUid:auth.uid,operationId:input.operationId,commandHash,state:'Running',createdAt,snapshot:contextSnapshot(config,account,evidence,shipment,plan),model,pinHash:model?digest(model):null};
+    const receipt={...coordinates,actorUid:auth.uid,operationId:input.operationId,commandHash,state:'Running',createdAt,snapshot:contextSnapshot(config,account,evidence,shipment,plan),model,pinHash:model?modelDigest(model):null};
     tx.create(receiptRef,receipt);tx.create(lockRef,coordinates);tx.create(ref('parcelAnalyses',analysisId),record);
     return {receipt,record};
   });
 }
-function originalClaimMatches(receipt,expected,record){
-  return receipt?.state==='Running'&&record?.state==='Running'&&matchesParcelAnalysisClaim(receipt,expected)
+function originalClaimBindings(receipt,expected,record){
+  return matchesParcelAnalysisClaim(receipt,expected)
     &&['actorUid','operationId','commandHash','createdAt','snapshot','model','pinHash'].every(key=>same(receipt[key],expected[key]))
     &&receipt.commandHash===digest({evidenceId:record.evidenceId,operationId:record.operationId})
     &&receipt.receiptKey===requestKey(record.ownerId,record.actorUid,record.operationId)
     &&receipt.actorUid===record.actorUid&&receipt.operationId===record.operationId&&receipt.ownerId===record.ownerId&&receipt.evidenceId===record.evidenceId&&receipt.analysisId===record.analysisId&&receipt.createdAt===record.createdAt&&receipt.expiresAt===record.expiresAt;
 }
+function originalClaimMatches(receipt,expected,record){return receipt?.state==='Running'&&record?.state==='Running'&&originalClaimBindings(receipt,expected,record);}
 const claimMatches=(receipt,expected,record,lock)=>originalClaimMatches(receipt,expected,record)&&matchesParcelAnalysisClaim(receipt,lock);
 function writeTerminal(tx,receipt,record,lock,outcome,now){
   const terminal=finishParcelAnalysis(record,outcome,now);
@@ -121,7 +127,8 @@ async function complete(auth,scope,expected,outcome,deadline){
     const current=await context(tx,scope,expected.evidenceId);
     const fresh=contextSnapshot(config,account,current.evidence,current.shipment,current.plan);
     let selected=outcome;
-    if(!same(receipt.model,acceptedModel())||receipt.pinHash!==(acceptedModel()?digest(acceptedModel()):null))selected={state:'Stale',reasonCode:'model-changed'};
+    const currentModel=acceptedModel();
+    if(!same(receipt.model,currentModel)||receipt.pinHash!==(currentModel?modelDigest(currentModel):null))selected={state:'Stale',reasonCode:'model-changed'};
     else if(!same(receipt.snapshot,fresh)||!eligible(scope,auth.uid,account,current.evidence,current.shipment,current.plan))selected={state:'Stale',reasonCode:same(receipt.snapshot.account,fresh.account)?'context-changed':'access-changed'};
     let predicted;
     if(selected.state==='Predicted'){
@@ -186,17 +193,19 @@ async function infer(receipt,deadline){
   if(!receipt.model)return {state:'Unavailable',reasonCode:'model-unavailable'};
   if(!process.env.RESEARCH_API_URL||!process.env.RESEARCH_API_TOKEN)return {state:'Unavailable',reasonCode:'service-unavailable'};
   try{
+    localAuthority(receipt.model);
     const bytes=await imageBytes(receipt.snapshot.evidence,deadline);
     const controller=new AbortController();let reader;
     const result=await bounded(async()=>{
       try{
+        localAuthority(receipt.model);
         const response=await fetch(`${process.env.RESEARCH_API_URL.replace(/\/$/,'')}/predict`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.RESEARCH_API_TOKEN}`},body:JSON.stringify({kind:'parcel',imageBase64:bytes.toString('base64')}),signal:controller.signal});
         if(controller.signal.aborted){void response.body?.cancel().catch(()=>{});throw problem('time-limit');}
         if(!response.ok){await response.body?.cancel();throw problem([429,503].includes(response.status)?'service-unavailable':'service-failed');}
         if(!response.body)throw problem('invalid-response');reader=response.body.getReader();const chunks=[];let length=0;
         while(true){const {done,value}=await reader.read();if(done)break;length+=value.byteLength;if(length>16*1024)throw problem('resource-limit');chunks.push(Buffer.from(value));}
         let parsed;try{parsed=JSON.parse(Buffer.concat(chunks,length).toString('utf8'));}catch{throw problem('invalid-response');}
-        try{validateParcelResponse(parsed,{acceptance:{...receipt.model,intendedUse:'registered-photo'},evidenceSha256:receipt.snapshot.evidence.sha256});}catch{throw problem('invalid-response');}
+        try{if(isParcelLocalEvaluationModel(receipt.model))validateParcelLocalEvaluationResponse(parsed,{model:receipt.model,evidenceSha256:receipt.snapshot.evidence.sha256});else validateParcelResponse(parsed,{acceptance:{...receipt.model,intendedUse:'registered-photo'},evidenceSha256:receipt.snapshot.evidence.sha256});}catch{throw problem('invalid-response');}
         return parsed;
       }finally{if(reader){void reader.cancel().catch(()=>{});}controller.abort();}
     },remaining(deadline,30000),()=>{controller.abort();if(reader)void reader.cancel().catch(()=>{});});
@@ -220,20 +229,58 @@ export async function resolveParcelAnalysis(auth,scope,input){
   const {analysisId}=validateResolveParcelAnalysis(input);
   return scopedTransaction(auth,scope,ROLES,async tx=>{
     const record=scoped(await tx.get(ref('parcelAnalyses',analysisId)),scope);
+    localAuthority(record.model);
     if(record.state!=='Running'||Date.now()<record.expiresAt)return savedOutcome(tx,record);
     const receiptKey=requestKey(scope,record.actorUid,record.operationId),receipt=(await tx.get(ref('parcelAnalysisRequests',receiptKey))).data(),lock=(await tx.get(ref('parcelAnalysisLocks',lockKey(scope,record.evidenceId)))).data();
     if(!originalClaimMatches(receipt,{...receipt,receiptKey},record))fail();
     return writeTerminal(tx,receipt,record,lock,{state:'Expired',reasonCode:'lease-expired'},Date.now());
   });
 }
+// Null cleanup has its own transaction and acknowledgement. It never returns
+// an old result or lets an old descriptor satisfy current inference authority.
+export async function cleanupParcelAnalysis(auth,scope,input){
+  const {analysisId,pendingOperationId}=validateCleanupParcelAnalysis(input);
+  return scopedTransaction(auth,scope,ROLES,async(tx,_config,account)=>{
+    const record=toPublicParcelAnalysis(scoped(await tx.get(ref('parcelAnalyses',analysisId)),scope));
+    if(record.actorUid!==auth.uid&&!['Admin','Manager'].includes(account.role))fail('Only the original creator or an administrator or manager may close this interrupted request.','permission-denied');
+    if(record.state!=='Running'&&!['Expired','Stale'].includes(record.state))return {released:false};
+    const receiptKey=requestKey(scope,record.actorUid,record.operationId),receipt=(await tx.get(ref('parcelAnalysisRequests',receiptKey))).data(),lock=(await tx.get(ref('parcelAnalysisLocks',lockKey(scope,record.evidenceId)))).data();
+    if(!originalClaimBindings(receipt,{...receipt,receiptKey},record)||!same(receipt.model,record.model)||receipt.pinHash!==(record.model?modelDigest(record.model):null))fail();
+    if(pendingOperationId!==undefined){
+      const pendingKey=requestKey(scope,auth.uid,pendingOperationId),pending=pendingKey===receiptKey?receipt:(await tx.get(ref('parcelAnalysisRequests',pendingKey))).data();
+      if(!pending||pending.ownerId!==scope||pending.actorUid!==auth.uid||pending.operationId!==pendingOperationId||pending.evidenceId!==record.evidenceId||pending.analysisId!==record.analysisId||pending.commandHash!==digest({evidenceId:record.evidenceId,operationId:pendingOperationId}))fail('The saved pending operation does not belong to this interrupted request.');
+      if(pendingKey!==receiptKey){const keys=['ownerId','actorUid','evidenceId','operationId','commandHash','state','analysisId','createdAt'];if(pending.state!=='Blocked'||Reflect.ownKeys(pending).length!==keys.length||keys.some(key=>!Object.hasOwn(pending,key))||!Number.isSafeInteger(pending.createdAt)||pending.createdAt<record.createdAt||pending.createdAt>Date.now())fail('The saved blocked operation is inconsistent.');}
+    }
+    const snapshot=receipt.snapshot;
+    if(snapshot?.config?.dataScopeId!==scope||snapshot.evidence?.ownerId!==scope||snapshot.evidence.shipmentId!==record.shipmentId||snapshot.evidence.version!==record.evidenceVersion||snapshot.evidence.sha256!==record.evidenceSha256||snapshot.evidence.stage!==record.stage||snapshot.evidence.captureSource!==record.captureSource||snapshot.evidence.capturedAtClient!==record.capturedAtClient||snapshot.shipment?.ownerId!==scope||snapshot.shipment.version!==record.shipmentVersion||!validImage(snapshot.evidence,scope,record.evidenceId)||!eligible(scope,record.actorUid,snapshot.account,snapshot.evidence,snapshot.shipment,snapshot.plan))fail();
+    const current=await context(tx,scope,record.evidenceId);
+    if(current.evidence.shipmentId!==record.shipmentId||current.plan&&current.plan.ownerId!==scope)fail();
+    if(record.state!=='Running'){
+      if(receipt.state!==record.state||receipt.completedAt!==record.completedAt)fail();
+      // Idempotent null acknowledgement cannot erase a successor's lock.
+      if(lock&&!matchesParcelAnalysisClaim(receipt,lock)&&(lock.analysisId===record.analysisId||lock.ownerId!==scope||lock.evidenceId!==record.evidenceId||!matchesParcelAnalysisClaim(lock,lock)))fail();
+      if(matchesParcelAnalysisClaim(receipt,lock))tx.delete(ref('parcelAnalysisLocks',lockKey(scope,record.evidenceId)));
+      return {released:true};
+    }
+    if(receipt.state!=='Running'||!matchesParcelAnalysisClaim(receipt,lock))fail();
+    let authorityLost=false;
+    if(isParcelLocalEvaluationModel(record.model)){try{assertParcelLocalEvaluationAuthority(record.model);}catch{authorityLost=true;}}
+    const time=Date.now();if(time<record.expiresAt&&!authorityLost)return {released:false};
+    writeTerminal(tx,receipt,record,lock,time>=record.expiresAt?{state:'Expired',reasonCode:'lease-expired'}:{state:'Stale',reasonCode:'model-changed'},time);
+    return {released:true};
+  });
+}
 function projectionConsistent(record,prediction){
   if(!prediction||record.state!=='Predicted'||record.predictionId!==`parcel-${record.analysisId}`||prediction.analysisId!==record.analysisId)return false;
+  if(!['evaluationKind','evaluationManifestSha256'].every(key=>record.model?.[key]===prediction[key]))return false;
+  if(['evaluationOnly','runtimeMode','operationally_approved'].some(key=>Object.hasOwn(prediction,key)))return false;
   const expected=projection(record),reviewFields=['reviewStatus','humanReviewRequired','version'];
   if(!Object.keys(expected).filter(key=>!reviewFields.includes(key)).every(key=>same(expected[key],prediction[key])))return false;
   if(prediction.reviewStatus!==record.reviewStatus||prediction.humanReviewRequired!==record.humanReviewRequired||prediction.version!==(record.reviewStatus==='Pending'?1:2))return false;
   return record.reviewStatus==='Pending'?['reviewNotes','reviewedBy','reviewedAt'].every(key=>prediction[key]===undefined||prediction[key]===null):['reviewNotes','reviewedBy','reviewedAt'].every(key=>same(record[key],prediction[key]));
 }
 async function savedOutcome(tx,record){
+  localAuthority(record.model);
   const safe=toPublicParcelAnalysis(record);
   if(safe.state==='Predicted'){
     const prediction=(await tx.get(ref('predictions',safe.predictionId))).data(),event=(await tx.get(ref('auditLogs',auditId(safe.predictionId,1)))).data();
@@ -243,6 +290,7 @@ async function savedOutcome(tx,record){
 }
 export async function reviewLinkedParcelPrediction(tx,predictionId,prediction,input,actor,role){
   const record=scoped(await tx.get(ref('parcelAnalyses',prediction.analysisId)),prediction.ownerId);
+  localAuthority(record.model);
   if(record.predictionId!==predictionId||record.reviewStatus!=='Pending'||record.version!==2||!projectionConsistent(record,prediction))fail('The linked parcel result is inconsistent or already reviewed.');
   const changed=applyReview(record,{analysisId:record.analysisId,version:record.version,decision:input.decision==='Accept'?'Accepted':'Rejected',notes:input.notes},{reviewerUid:actor,role,nowMs:Date.now()});
   const event=await tx.get(ref('auditLogs',auditId(predictionId,2)));if(event.exists)fail('The linked parcel review is inconsistent.');
@@ -253,6 +301,7 @@ export async function reviewParcelAnalysis(auth,scope,input){
   const data=validateParcelAnalysisReview(input);
   return scopedTransaction(auth,scope,['Admin','Manager'],async(tx,_config,account)=>{
     const record=scoped(await tx.get(ref('parcelAnalyses',data.analysisId)),scope);
+    localAuthority(record.model);
     if(record.version!==data.version)fail('This parcel review changed. Refresh and try again.');
     if(record.state==='Predicted'){
       if(!['Accepted','Rejected'].includes(data.decision))fail('Choose Accept or Reject for a predicted result.');

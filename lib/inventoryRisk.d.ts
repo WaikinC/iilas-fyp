@@ -1,0 +1,15 @@
+export type RiskLabel='Normal'|'Reorder Risk'|'Critical Stock Risk';
+export type EvidenceRef={kind:'stockMovements'|'shipments'|'purchaseOrders';id:string};
+export type CaptureInput={productId:string;productVersion:number;operationId:string};
+export type ReviewInput={snapshotId:string;version:number;operationId:string;decision:RiskLabel|'Unresolved';reason:string;evidenceNotes:string;fulfilmentImpact:string;evidenceRefs:EvidenceRef[]};
+export type Features={available_quantity:number;reserved_quantity:number;movement_frequency:number|null;reorder_distance:number;adjustment_count:number|null;days_since_replenishment:number|null};
+export type Assessment={method:'rules';productId:string;productVersion:number;observedAtMs:number;recommendation:'Reorder review'|'No reorder warning'|'Balance needs review';reasons:string[];features:Features|null;history:{observedMovementCount:number;observedAdjustmentCount:number;observedCorrectionCount:number;coverage:'Unverified';receiptId:string|null;receiptAtMs:number|null;issues:string[]};captureAllowed:boolean};
+export type CaptureResult={state:'Captured';snapshotId:string;replayed:boolean}|{state:'Cancelled';snapshotId:null;replayed:boolean};
+export type ReviewResult={snapshotId:string;reviewId:string;version:number;replayed:boolean}|{state:'Cancelled';snapshotId:string;reviewId:null;version:null;replayed:boolean};
+export const INVENTORY_RISK_VERSIONS:Readonly<{rules:string;features:string;rubric:string}>;
+export const INVENTORY_RISK_LABELS:readonly RiskLabel[];
+export function validateAssessmentInput(input:unknown):{productId:string};
+export function validateCaptureInput(input:unknown):CaptureInput;
+export function validateReviewInput(input:unknown):ReviewInput;
+export function canonicalInventoryRisk(value:unknown):string;
+export function buildInventoryAssessment(input:{productId:string;product:Record<string,unknown>;movements?:Record<string,unknown>[];receiptCandidates?:Record<string,unknown>[];correctionLinks?:Record<string,unknown>;cutoffMs:number;overflow?:boolean}):Assessment;

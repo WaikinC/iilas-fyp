@@ -1,3 +1,7 @@
+## Spark + MSI adapters — 28 October 2026
+
+`tools/msi-backend/` is the selected Spark route for trusted commands and private proof files; Python services and the local chain remain on MSI. `tools/msi-gateway/` and Firebase Functions retain the earlier local/hybrid compatibility paths. Private preparation/owner/checkpoint/artifact receipts stay under ignored outputs. The full workspace remains together; see [current operations guide](SPARK_MSI_DEMO_GUIDE_2026-10-28.md).
+
 # IILAS project structure
 
 ## Current MSI workspace — 21 October 2026

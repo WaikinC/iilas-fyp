@@ -1,0 +1,4 @@
+import {spawnSync} from 'node:child_process';
+const steps=[['scripts/customer-access-foundation-qa.mjs'],['--test','scripts/customer-evidence-qa.mjs','scripts/customer-portal-contract-qa.mjs'],['scripts/customer-portal-ui-qa.mjs'],['node_modules/typescript/bin/tsc','--noEmit','-p','tsconfig.app.json'],['node_modules/vite/bin/vite.js','build','--config','vite.config.ts'],['node_modules/eslint/bin/eslint.js','.','--ignore-pattern','dist','--ignore-pattern','.next']];
+for(const args of steps){const r=spawnSync(process.execPath,args,{stdio:'inherit'});if(r.status!==0)process.exit(r.status??1);}
+console.log('Customer interface passed: account/rules compatibility, bounded authenticated proof checks, Strict Mode desktop/mobile portal/grant fixtures, source build and lint (existing image warnings only). Actual emulator/browser workflow remains in final scenario phase.');

@@ -1,15 +1,18 @@
-import {useEffect, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {collection, onSnapshot, query, where} from 'firebase/firestore';
 import {db} from '../../../lib/firebase';
 import type {Membership} from '../workspace/WorkspaceGate';
 import type {DataRecord} from './Operations';
 import EvidenceUpload from './EvidenceUpload';
+import {canChangeEvidenceSource,type EvidenceActivity} from './delivery/deliveryActivity';
 
 /** A focused Prepared-shipment view, separate from active picking jobs and delivery events. */
-export default function PreDispatchEvidence({member,shipments,evidence}:{
-  member:Membership;shipments:DataRecord[];evidence?:DataRecord[];
+export default function PreDispatchEvidence({member,shipments,evidence,onActivityChange}:{
+  member:Membership;shipments:DataRecord[];evidence?:DataRecord[];onActivityChange?:(key:string,activity:EvidenceActivity|null)=>void;
 }){
   const [selected,setSelected]=useState('');
+  const [activity,setActivity]=useState<EvidenceActivity|null>(null);
+  const report=useCallback((key:string,next:EvidenceActivity|null)=>{setActivity(old=>next===null&&old?.contextKey!==key?old:next);onActivityChange?.(key,next);},[onActivityChange]);
   const [saved,setSaved]=useState<{scope:string;records:DataRecord[]}>({scope:'',records:[]});
   const [error,setError]=useState('');
   useEffect(()=>{
@@ -26,14 +29,15 @@ export default function PreDispatchEvidence({member,shipments,evidence}:{
     <h2>Pre-dispatch parcel evidence</h2>
     <p>Photograph the prepared parcel after warehouse handover and before dispatch. This optional record documents its visible condition at this stage.</p>
     {prepared.length ? <label className="field">Prepared shipment
-      <select aria-label="Prepared shipment for evidence" value={shipment?.id??''} onChange={event=>setSelected(event.target.value)}>
+      <select aria-label="Prepared shipment for evidence" value={shipment?.id??''} disabled={!canChangeEvidenceSource(activity)} onChange={event=>{if(canChangeEvidenceSource(activity))setSelected(event.target.value);}}>
         <option value="">Select a prepared shipment…</option>
         {prepared.map(record=><option key={record.id} value={record.id}>{String(record.reference)} · {String(record.recipient)}</option>)}
       </select>
     </label> : <p>No Prepared shipments. Complete the warehouse handover to add pre-dispatch parcel photos.</p>}
+    {!canChangeEvidenceSource(activity)&&<p role="status">Finish or discard the selected evidence, or recover its saved proof, before choosing another shipment.</p>}
     {error&&<p className="error" role="alert">{error}</p>}
     {shipment&&<div className="pre-dispatch-detail"><h3>{String(shipment.reference)} · Prepared</h3>
-      <EvidenceUpload shipment={shipment} member={member} stage="Pre-dispatch" evidence={records.filter(record=>record.shipmentId===shipment.id)}/>
+      <EvidenceUpload shipment={shipment} member={member} stage="Pre-dispatch" evidence={records.filter(record=>record.shipmentId===shipment.id)} onActivityChange={report}/>
     </div>}
   </section>;
 }

@@ -1,0 +1,17 @@
+export type DeliveryRow={id:string;version:number;[key:string]:unknown};
+export type DeliveryStatus='Dispatched'|'In Transit'|'Attempt Failed'|'Delivered'|'Returned';
+export type DeliveryArea='deliveries'|'reviews'|'prepared'|'customers';
+export type DeliveryTask='progress'|'evidence'|'risk'|'location';
+export type DeliveryFilters={search:string;status:string};
+export type DeliveryMember={uid:string;workspaceId:string;role:string;status:string;active:boolean;version:number};
+export type DeliveryQueueEntry={shipment:DeliveryRow;delivery?:DeliveryRow;status:DeliveryStatus|null};
+const transitions:Record<DeliveryStatus,readonly DeliveryStatus[]>={Dispatched:['In Transit'],'In Transit':['Attempt Failed','Delivered','Returned'],'Attempt Failed':['In Transit','Returned'],Delivered:[],Returned:[]};
+export function recordedDeliveryStatus(delivery?:DeliveryRow):DeliveryStatus|null{if(!delivery)return 'Dispatched';const s=delivery.status;return typeof s==='string'&&Object.hasOwn(transitions,s)?s as DeliveryStatus:null;}
+export function nextDeliveryStatuses(status:unknown):readonly DeliveryStatus[]{return typeof status==='string'&&Object.hasOwn(transitions,status)?transitions[status as DeliveryStatus]:[];}
+export function canUpdateDelivery(member:DeliveryMember,shipment:DeliveryRow,delivery?:DeliveryRow):boolean{return member.active&&member.status==='Approved'&&shipment.status==='Dispatched'&&Number.isSafeInteger(shipment.version)&&shipment.version>0&&(!delivery||Number.isSafeInteger(delivery.version)&&delivery.version>0)&&nextDeliveryStatuses(recordedDeliveryStatus(delivery)).length>0&&(['Admin','Manager','Logistics'].includes(member.role)||member.role==='Driver'&&shipment.driverUid===member.uid);}
+export function selectDeliveryRows(shipments:readonly DeliveryRow[],deliveries:readonly DeliveryRow[],member:DeliveryMember,filters:DeliveryFilters):DeliveryQueueEntry[]{const needle=filters.search.trim().toLowerCase(),byId=new Map(deliveries.map(r=>[r.id,r]));return shipments.filter(s=>s.status==='Dispatched'&&(member.role!=='Driver'||s.driverUid===member.uid)).map(shipment=>{const delivery=byId.get(shipment.id);return {shipment,delivery,status:recordedDeliveryStatus(delivery)};}).filter(r=>(!filters.status||(r.status??'Unknown')===filters.status)&&[r.shipment.reference,r.shipment.recipient,r.shipment.address].some(v=>typeof v==='string'&&v.toLowerCase().includes(needle)));}
+type Tone='blue'|'green'|'amber'|'red'|'grey';
+const tones:Record<'status'|'risk'|'review',Record<string,Tone>>={status:{Dispatched:'blue','In Transit':'blue','Attempt Failed':'amber',Delivered:'green',Returned:'grey'},risk:{Low:'green',Medium:'amber',High:'red'},review:{Pending:'amber',NeedsFollowUp:'amber',Acknowledge:'green'}};
+export function deliveryTone(domain:keyof typeof tones,value:unknown):Tone{return typeof value==='string'&&Object.hasOwn(tones[domain],value)?tones[domain][value]:'grey';}
+export function recordedLocation(row?:DeliveryRow){if(!row||typeof row.latitude!=='number'||!Number.isFinite(row.latitude)||Math.abs(row.latitude)>90||typeof row.longitude!=='number'||!Number.isFinite(row.longitude)||Math.abs(row.longitude)>180)return null;return {latitude:row.latitude,longitude:row.longitude,accuracy:typeof row.accuracy==='number'&&Number.isFinite(row.accuracy)&&row.accuracy>=0?row.accuracy:null,submittedAt:row.submittedAt};}
+export function deliveryWorkspaceKey(member:DeliveryMember):string{return JSON.stringify([member.uid,member.workspaceId,member.role,member.status,member.active,member.version]);}

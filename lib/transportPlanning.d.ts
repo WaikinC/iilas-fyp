@@ -1,0 +1,11 @@
+export type Waypoint={latitude:number;longitude:number};
+export type PlanningInputs={origin:Waypoint;destination:Waypoint;speedKph:number};
+export type PlanningEstimate={method:'great-circle-v1';distanceKm:number;estimatedHours:number};
+export type VehicleData={name:string;capacity:number;status:'Available'|'Maintenance'|'Unavailable';maintenanceDate:string;fuelLitres:number};
+export type DriverData={name:string;userId:string;licence:string;status:'Available'|'Unavailable'};
+export type FleetUpdate={operationId:string;kind:'vehicles'|'drivers';id:string;expectedVersion:number;data:VehicleData|DriverData};
+export type TransportRevision={operationId:string;shipmentId:string;expectedShipmentVersion:number;expectedPlanVersion:number;vehicleId:string;driverId:string;origin:string;carrier:string;plannedDate:string;distanceKm:number;estimatedHours:number;cost:number;planning:PlanningInputs|null};
+export function planningEstimate(value:unknown):PlanningEstimate;
+export function validatePlanningInputs(value:unknown):PlanningInputs;
+export function validateFleetUpdate(value:unknown):FleetUpdate;
+export function validateTransportRevision(value:unknown):TransportRevision;

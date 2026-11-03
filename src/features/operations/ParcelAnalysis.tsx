@@ -1,3 +1,4 @@
+import {sessionRecoveryStorage} from '../../../lib/firebaseRuntime';
 import {useEffect,useRef,useState} from 'react';
 import {collection,onSnapshot,query,where} from 'firebase/firestore';
 import {auth,db} from '../../../lib/firebase';
@@ -31,7 +32,7 @@ function AnalysisContext({member,shipment,evidence,stage}:Props&{stage:EvidenceS
   const [recovery]=useState<{client:ParcelAnalysisRetry|null;error:string}>(()=>{
     if(!knownStage(evidence.stage))return {client:null,error:''};
     try{
-      const client=createParcelAnalysisRetry({storage:window.sessionStorage,context:{scopeId:member.workspaceId,actorUid:member.uid,evidenceId:evidence.id,stage},command:workspaceCommand as ParcelAnalysisCommand});
+      const client=createParcelAnalysisRetry({storage:sessionRecoveryStorage,context:{scopeId:member.workspaceId,actorUid:member.uid,evidenceId:evidence.id,stage},command:workspaceCommand as ParcelAnalysisCommand});
       client.pending();
       return {client,error:''};
     }catch{return {client:null,error:'Saved parcel requests cannot be read. Enable session storage and reconcile saved outcomes before requesting analysis.'};}
@@ -93,6 +94,13 @@ function AnalysisContext({member,shipment,evidence,stage}:Props&{stage:EvidenceS
       if(stillCurrent())setError(review?'Review could not be confirmed. Check the saved outcome before reviewing again.':'The outcome could not be confirmed. Keep this saved request and select Check outcome.');
     }finally{inFlight.current=false;if(active.current)setBusy(false);}
   }
+  async function closeInterrupted(record:ParcelAnalysisPublic){
+    if(!recovery.client||inFlight.current||!stillCurrent())return;
+    inFlight.current=true;setBusy(true);setError('');setNotice('');
+    try{const ack=await recovery.client.cleanup(record);if(!stillCurrent())return;if(!ack.released)throw new Error();setResult(null);setNotice(ack.recoveryComplete?'Interrupted request closed. Starting another analysis requires an explicit request.':'Server claim released. Saved request recovery is incomplete; check the remaining saved request before starting again.');}
+    catch{if(stillCurrent())setError('This interrupted request could not be closed. Its saved identity remains available for another explicit check.');}
+    finally{inFlight.current=false;if(active.current)setBusy(false);}
+  }
   const saved=new Map(records.map(record=>[record.analysisId,record]));
   if(result&&result.state!=='Busy'){
     const previous=saved.get(result.analysisId);
@@ -102,7 +110,7 @@ function AnalysisContext({member,shipment,evidence,stage}:Props&{stage:EvidenceS
   const canReview=member.active&&member.status==='Approved'&&['Admin','Manager'].includes(member.role);
   return <section className="parcel-analysis" aria-label="Parcel photo analysis">
     <h4>Parcel photo analysis</h4>
-    <p>AI condition analysis is unavailable until an evaluated model is accepted. A request saves its outcome for this registered photo. Human review is required for every inference; a photo shows only visible parcel faces.</p>
+    <p>Operational parcel analysis requires an evaluated, accepted model. Local evaluation records experimental observations for this registered photo. Every inference needs human review; a photo shows only visible parcel faces.</p>
     {recovery.error&&<p className="error" role="alert">{recovery.error}</p>}
     {loading&&<p role="status">Loading saved analyses…</p>}
     <div className="evidence-actions">
@@ -117,6 +125,7 @@ function AnalysisContext({member,shipment,evidence,stage}:Props&{stage:EvidenceS
     {!loading&&analyses.length===0&&!pending&&<p>No saved analysis for this photo.</p>}
     {analyses.map(record=><article className="parcel-analysis-outcome" key={`${record.analysisId}:${record.version}`}>
       <h5>{record.state}{record.label!==null?`: ${record.label}`:''}</h5>
+      {record.model?.evaluationKind==='local-experimental'&&<p className="parcel-review-required">Local experimental observation · No operational acceptance. Human review records this image only; it does not approve the model or trigger operational decisions.</p>}
       {record.reasonCode&&<p>{parcelAnalysisReasonMessage(record.reasonCode)}</p>}
       {record.state==='Running'&&<p role="status">Analysis is running. Select Check outcome to refresh; no background retry is scheduled.</p>}
       <dl className="parcel-evidence-details">
@@ -130,7 +139,7 @@ function AnalysisContext({member,shipment,evidence,stage}:Props&{stage:EvidenceS
       {!(record.stage==='Pre-dispatch'&&shipment.status==='Prepared'||record.stage==='Delivery'&&shipment.status==='Dispatched')&&<p>Historical stage assessment; this does not describe the shipment’s current condition.</p>}
       {record.model&&<details><summary>Model and result provenance</summary>
         <p>{record.model.model} · {record.model.preprocessing} · Contrast: {record.model.contrast}</p>
-        <dl className="parcel-evidence-details"><div><dt>Model version</dt><dd>{record.model.modelVersion}</dd></div><div><dt>Selection SHA-256</dt><dd>{record.model.selectionSha256}</dd></div><div><dt>Evaluation SHA-256</dt><dd>{record.model.evaluationSha256}</dd></div><div><dt>Acceptance SHA-256</dt><dd>{record.model.acceptanceSha256}</dd></div><div><dt>Service request</dt><dd>{record.serviceRequestId}</dd></div></dl>
+        <dl className="parcel-evidence-details"><div><dt>Model version</dt><dd>{record.model.modelVersion}</dd></div><div><dt>Selection SHA-256</dt><dd>{record.model.selectionSha256}</dd></div><div><dt>Evaluation SHA-256</dt><dd>{record.model.evaluationSha256}</dd></div><div><dt>Acceptance SHA-256</dt><dd>{record.model.acceptanceSha256??'No operational acceptance'}</dd></div>{record.model.evaluationKind==='local-experimental'&&<div><dt>Local evaluation manifest SHA-256</dt><dd>{record.model.evaluationManifestSha256}</dd></div>}<div><dt>Service request</dt><dd>{record.serviceRequestId}</dd></div></dl>
         {record.probabilities&&<p>Normal score {(record.probabilities[0]*100).toFixed(1)}%; Damaged score {(record.probabilities[1]*100).toFixed(1)}%. Confidence is uncalibrated, not a measured probability of correctness.</p>}
         <p>Model processing: {record.processingTimeMs} ms. Service total: {record.totalProcessingTimeMs} ms.</p>
       </details>}
@@ -139,6 +148,7 @@ function AnalysisContext({member,shipment,evidence,stage}:Props&{stage:EvidenceS
       {record.reviewNotes&&<p>Review notes: {record.reviewNotes}</p>}
       {record.reviewedBy&&<p>Reviewed by {record.reviewedBy} · {recordedTime(record.reviewedAt)}</p>}
       {record.state==='Running'&&!pending&&<button type="button" disabled={busy} onClick={()=>void run(async()=>safeSavedOutcome(await workspaceCommand('resolveParcelAnalysis',{analysisId:record.analysisId}),record.analysisId))}>Check saved outcome</button>}
+      {recovery.client&&(record.actorUid===member.uid||canReview)&&(record.state==='Running'||pending&&['Expired','Stale'].includes(record.state))&&<button type="button" disabled={busy} onClick={()=>void closeInterrupted(record)}>Close interrupted request</button>}
       {canReview&&record.reviewStatus==='Pending'&&['Predicted','Abstained'].includes(record.state)&&<form className="parcel-analysis-review" onSubmit={event=>{
         event.preventDefault();const input=Object.fromEntries(new FormData(event.currentTarget));
         void run(async()=>{

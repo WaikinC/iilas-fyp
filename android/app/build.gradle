@@ -1,0 +1,85 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.kapt'
+kapt { arguments { arg('room.schemaLocation', "$projectDir/schemas") } }
+def cloudAssetDir = System.getenv('IILAS_CLOUD_ASSET_DIR') ?: file('src/cloudDemo/assets').absolutePath
+def cloudConfigFile = new File(cloudAssetDir, 'mobile-environment.json')
+def cloudOptions = cloudConfigFile.exists() ? new groovy.json.JsonSlurper().parse(cloudConfigFile) : [:]
+def cloudConfigSha = cloudConfigFile.exists() ? java.security.MessageDigest.getInstance('SHA-256').digest(cloudConfigFile.bytes).encodeHex().toString() : ''
+
+android {
+    namespace = "com.iilas.fyp.driverdemo"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.iilas.fyp.driverdemo"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField 'String', 'IILAS_PROJECT_ID', '"fyp-inventory-and-logistics"'
+        buildConfigField 'String', 'IILAS_CONFIG_SHA256', '""'
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:mobile-local.json'
+        }
+    }
+    flavorDimensions += 'environment'
+    productFlavors {
+        local { dimension 'environment'; applicationIdSuffix '.local' }
+        cloudDemo {
+            dimension 'environment'; applicationIdSuffix '.cloud'
+            buildConfigField 'String', 'IILAS_PROJECT_ID', groovy.json.JsonOutput.toJson(cloudOptions.projectId ?: '')
+            buildConfigField 'String', 'IILAS_CONFIG_SHA256', groovy.json.JsonOutput.toJson(cloudConfigSha)
+        }
+    }
+    sourceSets.cloudDemo.assets.srcDirs = [cloudAssetDir]
+    buildTypes {
+        debug { }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+android { buildFeatures { buildConfig true }; kotlinOptions { jvmTarget = '21' }; testOptions { unitTests.includeAndroidResources = true } }
+dependencyLocking { lockAllConfigurations() }
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name.toLowerCase().contains('release') }) throw new GradleException('Only local debug builds are permitted.')
+    if (graph.allTasks.any { it.name == 'assembleCloudDemoDebug' } && !cloudConfigFile.exists()) throw new GradleException('Generate an explicit ignored cloud-demo profile first.')
+    if (graph.allTasks.any { it.name == 'assembleLocalDebug' } && !file('src/local/assets/mobile-environment.json').exists()) throw new GradleException('Generate the ignored local mobile profile first.')
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+    testImplementation 'androidx.test:core:1.7.0'
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+    implementation platform('com.google.firebase:firebase-bom:35.1.0')
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-functions'
+    implementation 'com.google.firebase:firebase-storage'
+    implementation 'androidx.room:room-runtime:2.8.5'
+    kapt 'androidx.room:room-compiler:2.8.5'
+    implementation 'androidx.work:work-runtime-ktx:2.11.2'
+}
+
+apply from: 'capacitor.build.gradle'
+
+
+tasks.withType(Test).configureEach { maxParallelForks = 1; maxHeapSize = "1024m" }

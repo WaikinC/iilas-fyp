@@ -1,0 +1,17 @@
+# Module URLs and record links
+
+The user confirmed separate module URLs after seeing that navigation currently changes only local Tab state. Their standing instruction delegates implementation choices and waives further design/plan approval prompts. Native execution remains selected. This change is prepared locally; publication is a separate step because the running MSI services pin application sources.
+
+Use readable paths for Dashboard, Products, Stock, Warehouse, Procurement, Shipments, Fleet, Transport, Delivery, Reports, Users and the isolated Customer portal. Shipment and purchase-order detail URLs use immutable document IDs, never names, recipient details, business codes or credentials. Direct entry and reload retain the requested page through normal login/account approval. Root resolves to the role's home. Unknown URLs show a useful unavailable page; non-Admin Users URLs never mount AdminPanel. Customer accounts remain in WorkspaceGate's isolated portal before any staff subscriptions, including when opening a staff URL.
+
+## Approach
+
+Use React Router 7.18.5 in Data mode within the current React/Vite SPA. The npm-published version supports Node20+, compatible with the required Node22; no Next routing or framework migration. The existing Firebase Hosting catch-all rewrite already serves deep links. A custom History implementation was considered but rejected because cancelled Back/Forward and repeated traversals are easy to corrupt. Hash routes were rejected because the user requested normal module URLs. Choosing the router and version is an implementation decision made under the user's delegation.
+
+Keep the account gate and RecordCreationProvider mounted above module selection. Navigation never performs a business command, retries a saved write, changes permissions or clears recovery. Router blockers bridge existing shipment busy/dirty exit decisions, including same-module detail changes and Back/Forward; cancellation keeps URL, draft and browser history coherent. Native beforeunload warnings protect active edits from reload/closing. Blocker callbacks are retired on account/authority changes. Forms and recovery keep their existing transaction/version rules.
+
+Paths: /dashboard; /inventory/products; /inventory/stock; /inventory/warehouse; /inventory/procurement; /inventory/procurement/orders/:id; /logistics/shipments[/:id]; /logistics/fleet; /logistics/transport; /logistics/deliveries; /reports; /users; /customer; /customer/shipments/:id. Detail views show explicit loading, denied/unavailable or missing states and never substitute another row. Existing manual actions, filters, dialogs, navy/purple styling and operational contracts remain.
+
+Verify parser/authorization boundaries, actual browser direct entry/reload/Back/Forward, cancelled and accepted dirty exits, rapid navigation, missing IDs, pending recovery and Customer isolation at desktop and390px. Use fictional local fixtures only, with non-loopback network blocked. Run build/lint/secret checks and original Firebase regressions sequentially if required by the final affected scope. No cloud writes, Hosting deployment, model evaluation, wallet signing, parcel/phone testing or Git publication is included in local implementation.
+
+References: [React Router useBlocker](https://reactrouter.com/7.18.5/api/hooks/useBlocker); project AGENTS.md and current account, shipment and procurement contracts.

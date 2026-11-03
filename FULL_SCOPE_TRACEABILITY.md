@@ -1,4 +1,85 @@
+## Cloud demonstration closure — 29 October 2026
+
+Actual Spark acceptance now includes seven workflow checks, three recovery checks, signed-in desktop/narrow browser evidence, earlier original-laptop human attestation and two human-confirmed blockchain registrations with retained Verified checks. All six observed gates are evidenced. Final backup verifies 344 cloud records/three accounts/seven MSI proof files, original 128 typed records/timestamps unchanged; intentional Manager reset preserved. Billing stays disabled. Registered fictional records remain; destructive cleanup is optional and unapproved. Camera/physical Android, restore rehearsal and Git publication stay deferred. The initial expired wallet claim required a bounded audited operator repair, not automatic recovery. See [current evidence and limits](docs/SPARK_MSI_CLOUD_STATUS_2026-10-29.md). Older pending statements below are historical.
+
+## Spark + MSI local demo verified — 28 October 2026
+
+Native Tasks1–9 are locally verified after review fixes:53focused/82legacy cases,8original Firebase suites/53workflow cases, MSI stock11/purchasing-browser5/delivery10 and18API/browser/chain cases pass; native59tests each flavour/builds/privacy pass. Original data and frozen science are preserved. The Hosting package is fixtureOnly and unpublished. User prefers Firebase Hosting first; real credential/HTTPS/production activation wiring and remote acceptance remain gatedTask10, billing disabled. Parcel/phone trials stay deferred; no cleanup route is wired. See [local acceptance](docs/SPARK_MSI_LOCAL_ACCEPTANCE_2026-10-28.md) and [activation review](docs/SPARK_MSI_ACTIVATION_REVIEW_2026-10-28.md).
+
 # IILAS Full-Scope Traceability
+
+## Spark + MSI backend selected — 28 October 2026
+
+The user chose Firebase Spark for existing Hosting/Auth/Firestore and MSI for trusted commands, private proof files, AI and blockchain, with billing disabled. This supersedes the Cloud Functions/Cloud Storage deployment plan. The user approved the [written design](docs/superpowers/specs/2026-10-28-firebase-spark-msi-backend-design.md). Its [ten-task Native plan](docs/superpowers/plans/2026-10-28-firebase-spark-msi-backend.md) is saved/self-reviewed and awaits human plan review: Tasks1–9 are local implementation/verification; Task10 retains separate exact credential/IAM/HTTPS/cloud-write gates. Billing remains prohibited throughout. The prior offline backup/adoption guard passes7tests and validates128cloud documents; runtime/SDK/file/native adapters have not yet changed. Current cloud records, local emulator data, models and chain remain separate/preserved; no billing, IAM, public endpoint or deployment action. Parcel testing stays paused and actual phone tests pending.
+
+## Existing Firebase destination selected — 28 October 2026
+
+The user now chooses reuse of `fyp-inventory-and-logistics`, superseding the earlier separate-project choice, and explicitly prohibits enabling billing. Read-only cloud audit/backup and the revised deployment plan are prepared:128documents/3Auth accounts, private hash parameters/rules/index metadata/current Hosting assets verified; no Storage buckets. [Audit](docs/EXISTING_FIREBASE_CLOUD_AUDIT_2026-10-28.md) and [plan](docs/superpowers/plans/2026-10-28-existing-firebase-msi-hybrid.md). Cloud data has no shared access configuration, the selected Admin email needs normal verification, and the current CLI account is Editor. Current product code/guards remain unchanged pending approved local adoption work; no billing/API/IAM/data/deployment/tunnel changes occurred. Existing owner groups remain separate; the MSI test snapshot is not imported.
+
+## Hybrid cloud/MSI preparation — 27 October 2026
+
+The approved hybrid work changes deployment adapters and environment isolation, retaining the report workflows and model identities. Local contracts cover signed inference/chain observation, authoritative result publication, Customer evidence, old recovery slots and separate Android packages. The [preparation audit](docs/HYBRID_DEMO_LOCAL_PREPARATION_2026-10-27.md) distinguishes software/local evidence from pending cloud, phone and parcel acceptance. No original cloud records or historical portfolios are migrated; Tasks9–10 require separate exact resource/billing/deployment authority.
+
+Local Phase A acceptance on 28 October passed75 focused software tests,53 final workflow checks and54 native tests per Android flavour, with original Firebase regressions and exact fixture cleanup. Actual cloud/phone/parcel acceptance is not implied.
+
+## Android Driver extension — 26 October 2026
+
+The approved React/Capacitor Android extension is implemented with app-private Room/SQLite assignment cache and immutable outbox, background location foreground service, explicit Start/Stop,30minute offline lease and automatic original-account drain. Named local Firebase commands preserve assignment/version authority, atomic receipts and proof finalisation. Normal web staff/Customer entry remains separate; parcel testing remains paused.53 native software tests,36 focused Node tests, real mobile Firebase5 scenarios/90 private-rule denials and1440/390 UI fixtures passed; all eight original suites,27 actual web/emulator workflow cases and frozen stock11/purchasing-browser5/delivery10 gates also passed; final live1665/116/2 state is exact. Automated acceptance passed21gates. The user will connect the phone later: APK installation, native SDK/device round trips, permissions, real background GPS and actual USB loss/reconnect remain **pending**, not passed. See [Android acceptance](docs/ANDROID_ACCEPTANCE_2026-10-26.md).
+
+
+## Remaining local FYP modules verified — 25 October 2026
+
+The [current requirement-to-test matrix](docs/FYP_REQUIREMENT_TEST_MATRIX_2026-10-25.md) covers every FR group in both original portfolios. Remaining inventory blockchain/control and logistics integrity/fleet/transport/reporting workflows now have local implementation and actual emulator/browser evidence. The distinct Customer portal uses explicit grants. No parcel tests were run; photo/live acceptance, real MetaMask, physical GPS and supervisor sign-off remain explicit dependencies. Stock81.53% and delivery98.33% retain synthetic-policy interpretation. Newer [completion evidence](docs/FYP_COMPLETION_AUDIT_2026-10-25.md) supersedes old incomplete implementation statements below, not their historical measurements.
+
+## Delivery-risk FYP demonstration verified — 25 October 2026
+
+The approved eight-task Native implementation is verified locally. Delivery Monitoring now uses an actual frozen three-class RF, trusted as-of shipment/event/proof facts, separate retained abnormality assessments, independent manager review revisions and exact saved-operation recovery. Driver recovery remains available after reassignment. History retains original facts/model/policy identity, all three uncalibrated scores and range/data-review/timeout warnings. No automatic stock, shipment, order or notification action follows.
+
+The grouped synthetic study used 1,200 snapshots/300 families and 11 development fits, then one frozen 180-row/45-family TEST evaluation. RF accuracy 98.33%, macro-F1 .9840, High precision 97.37%, recall 100%; family-bootstrap accuracy interval 96.11–100%. DT 99.44%, LR 92.78%, Dummy 43.89%. These measure agreement with the AI-authored synthetic triage policy, not genuine delivery forecasting. RF remains the report main model despite the stronger DT test result. No consumed TEST replay/refit occurred.
+
+Ten actual model/Firebase/browser checks pass with exact fixture cleanup, including lost successful start/review replies, two independent review revisions, invalid expected-window Unavailable and closed rules-only handling. The predeclared Low/Medium/High workflow cases predicted Low/High/High; the first-failure Medium disagreement is retained. Early dispatch minutes fall outside some TRAIN ranges; warnings remain visible. Three callable probes took 3.034–3.059 seconds, with 27.17–28.63 milliseconds inside RF prediction. This tiny software trial is not an accuracy estimate or service guarantee.
+
+All 14 preservation-harness entries, two actual stock purchasing/browser suites and five stock follow-on suites pass. Thirty focused delivery JS and 37 Python software/service checks pass. Build passes; lint has zero errors/six existing warnings. One fresh source review found three Important UI defects, fixed with rendered regressions. Parent visual checks confirmed 1440px/390px layouts without overflow. Two minor formatting/spacing items remain deferred. Datasets/models/private configuration/exports/evidence remain ignored; no publication, production, camera collection or unrelated feature work occurred.
+
+[Local guide](docs/DELIVERY_RISK_DEMO_LOCAL_GUIDE_2026-10-24.md). [Delivery contract](docs/DELIVERY_RISK_DEMO_CONTRACT_2026-10-24.md). Independent real-delivery forecasting, richer weather/traffic/route inputs and a prospectively registered improvement cohort remain future work, not prerequisites for this disclosed FYP prototype.
+
+
+
+## Demo requirement-to-purchase workflow — 24 October 2026
+
+The six-task Native implementation is verified locally: actual frozen-RF14/Firebase purchasing11 checks and real-browser5 checks pass, with exact fixture cleanup. All ten preservation suites (13 harness entries) and prior reorder9/demo-product10/browser7/context7/legacy6 checks pass.194 focused JavaScript,59 affected Python and65 fixture-browser checks pass. Build passes; lint0 errors and6 existing image warnings.
+
+Accepted demo requirements can explicitly create one source-linked, single-product purchase order. Staff enter supplier, quantity, cost and date; a different Admin/Manager approves the PO. Issue creates expected incoming; explicit partial/full receipts atomically update incoming, purchase history and location-aware demonstration stock. Permanent links prevent duplicate orders, and exact saved-operation recovery covers lost replies. Original experimental model provenance stays unchanged. Historical/manual orders are not backfilled. Creation-disabled admitted approval/recovery works without model configuration. A reproduced Firestore absent-link read defect was fixed; known shared requirement reads succeed while unknown/foreign reads, unscoped lists and direct writes remain denied.
+
+This implements the demo FR-24/25/26/27 chain. It does not qualify genuine inventory history or independent intended-use accuracy, and sends no supplier messages. The frozen RF14 simulated study remains81.53% accuracy, Critical precision79.00%, recall87.78%; no retraining or consumed-TEST replay. Next stock work is independent intended-use evaluation and trustworthy factual-history qualification. Camera, other AI and additional features remain deferred. The single fresh final review found one Important outcome-correlation defect, fixed RED→GREEN; no Minor was raised in this review. The earlier retained-event correlation deferral is addressed by exact Accept-event proof.
+
+See the [purchasing guide](docs/INVENTORY_DEMO_PROCUREMENT_LOCAL_GUIDE_2026-10-24.md). This latest section supersedes historical pending-plan/runtime pointers.
+
+## Demo risk alerts and independent reorder review — 24 October 2026
+
+New admitted product-bound RF14 risk results create separate immutable demo alerts and Pending requirements atomically. Independent Admin/Manager Accept/Reject has attributable events, stale-product checks and exact saved-request recovery. The bounded Procurement queue is separate from operational stock/purchases; manual, Normal, Unavailable and historical results create no new items. Actual local emulator9/browser3 checks pass with exact cleanup; all final affected checks and the original ten-suite run pass, with both Important review findings fixed and one deferred Minor. FR-12/FR-13/FR-21 are demonstration workflow coverage, not genuine quality qualification. FR-27 requirement→PO→expected incoming and independent intended-use/genuine-history qualification remain incomplete. No training or scientific TEST replay. See the [local guide](docs/INVENTORY_DEMO_REORDER_LOCAL_GUIDE_2026-10-23.md).
+
+## Selected demo-product stock experiments — 23 October 2026
+
+The approved local workflow connects the same frozen RF14 to a selected demonstration product: three trusted balance facts and eight explicitly fictional context facts. Product changes during inference retain Unavailable against the original snapshot; old/manual/demo saved requests recover through their own protocols. No stock/procurement/operational-alert write or genuine-readiness promotion follows. Actual 10 emulator and 7 browser checks pass with exact cleanup, along with 117 focused JS and 59 affected Python checks and 29 fixture-browser scenarios. All 13 sequential Firebase suites pass with exact cleanup; the fresh review found no Critical/Important findings and one deferred refresh-UX minor. Synthetic accuracy 81.53%, Critical precision 79%, recall 87.78% are unchanged; real-history qualification and independent evaluation remain incomplete. See [local guide](docs/INVENTORY_DEMO_PRODUCT_AI_LOCAL_GUIDE_2026-10-23.md).
+
+
+## Context-aware stock experiment — 23 October 2026
+
+The approved local integration now serves the frozen fourteen-input Random Forest through the existing experimental stock screen. Eleven explicit fictional facts include additional firm commitments and incoming supply. New version2 results bind the exact model, features and synthetic study; legacy six-input outcomes retain their original facts/metrics. Old saved requests resolve without fresh v1 inference. Real product history/readiness remains unqualified; no stock/purchasing changes or independent warehouse-accuracy claim follows.
+
+Actual Firebase/RF14 and browser lost-reply/reload recovery passed with exact temporary-fixture cleanup. The controlled restart preserved 1,665 documents, 116 accounts and two stored objects; all required sequential regressions passed and the fresh reviewer found no blocking issues. Full isolated research collection: 60 modules, 1036 top-level test executions, 14 existing optional skips, zero failed modules. Synthetic accuracy81.53%, Critical precision79.00%, recall87.78% and accuracy interval78.54–84.86% come from the already consumed720-row/60-family study, not new test replay. See [current guide](docs/INVENTORY_CONTEXT_AI_LOCAL_GUIDE_2026-10-23.md). Qualified genuine history and independently labelled intended-use evaluation remain unfinished; the full stock goal stays active.
+
+
+## Experimental stock integration checkpoint — 23 October 2026
+
+Partner-report three-class stock-condition RF is locally connected for complete fictional inputs through protected Firebase commands and a separately authenticated native Python service. Contract: lib/inventoryAI.js; lifecycle: backend/functions/inventoryAI.mjs; UI: src/features/stock/InventoryAIExperiment.tsx; service: research/serve_inventory_local_eval.py. Actual emulator/browser/native transport, score/hash lineage and request recovery are verified by scripts/inventory-ai-emulator-qa.mjs; controlled races and malformed responses use software fixtures. This completes the experimental app connection only. Independent real-inventory quality, qualified history and operational acceptance remain incomplete. Frozen synthetic scores and source-pinned training evidence remain unchanged. [Usage and limits](docs/INVENTORY_AI_LOCAL_GUIDE_2026-10-23.md).
+
+## Inventory sparse-record foundation — 22 October 2026
+
+User approved the inventory design and Native implementation while leaving the parcel camera trial deferred. Stock Management now has a separate rule-based assessment and explicit recoverable snapshot capture. A different Admin/Manager can record human Normal/Reorder Risk/Critical Stock Risk or Unresolved judgements with append-only review revisions; both capture and review have exact outcome recovery. Frozen history/receipt details and review times remain visible. Missing history is not zero and every snapshot remains trainingEligibility NotAssessed. This does not activate a three-class AI model, train on business data, change stock/purchases, or complete independent accuracy evaluation.
+
+Canonical contract: docs/INVENTORY_STOCK_ASSESSMENT_2026-10-22.md. New public snapshot/review collections allow Approved fixed-scope reads and no client writes; operation receipts remain server-private. Existing permissions, selected Admin/data, Prepared handover and parcel false/null experimental boundaries are preserved. Local verification/review evidence is in outputs/inventory-risk-20261022; consult the final handoff for current runtime and terminal test results. No publication or production deployment is included. Older parcel-first/other-AI-deferred entries below are historical and do not override this newer explicit inventory instruction.
 
 ## FR-10/FR-11 typed executor checkpoint — 22 October 2026
 

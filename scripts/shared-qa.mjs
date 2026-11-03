@@ -1,3 +1,4 @@
+import{createFixtureBusinessRecord,fixtureCreationData}from'./record-creation-fixtures.mjs';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {doc,getDoc,getDocs,collection,query,where,setDoc,updateDoc} from 'firebase/firestore';
@@ -11,7 +12,7 @@ const {Inventory:inventory,Warehouse:warehouse,Manager:manager,Logistics:logisti
 const snapshot=async(kind,key,c=admin)=>({id:key,...(await getDoc(doc(c.db,kind,key))).data()});
 const denied=async fn=>assert.rejects(fn,e=>/permission-denied|storage\/unauthorized/.test(e.code));
 const base={name:'Shared pump',sku:`QA-${suffix}`,barcode:barcode(),category:'Pump',location:'A-01',reorderLevel:3,quantityOnHand:20,reservedQuantity:0,status:'Active',imageDataUrl:''};
-const {id:productId}=await inventory.call('save',{kind:'products',data:base});
+const {id:productId}=await createFixtureBusinessRecord(inventory,'products',fixtureCreationData('products',base));
 assert.equal((await snapshot('products',productId,warehouse)).quantityOnHand,20);
 assert.equal((await snapshot('products',productId,viewer)).ownerId,scope);
 await denied(()=>getDoc(doc(outsider.db,'products',productId)));
@@ -30,7 +31,7 @@ await manager.call('approval',{id:request.id,version:1,decision:'Approve',notes:
 assert.equal((await snapshot('products',productId)).quantityOnHand,22);
 await assert.rejects(()=>manager.call('approval',{id:request.id,version:1,decision:'Approve',notes:'Replay'}),/changed/);
 const supplier=await inventory.call('entity',{kind:'suppliers',data:{name:`QA Supplier ${suffix}`,contact:'supplier@example.test'}});
-const po=await inventory.call('purchaseOrder',{reference:`PO-${suffix}`,supplierId:supplier.id,expectedDate:new Date(Date.now()+8*3600000).toISOString().slice(0,10),items:[{productId,quantity:5,unitCost:12.5}]});
+const po=await createFixtureBusinessRecord(inventory,'purchaseOrders',fixtureCreationData('purchaseOrders',{reference:`PO-${suffix}`,supplierId:supplier.id,expectedDate:new Date(Date.now()+8*3600000).toISOString().slice(0,10),items:[{productId,quantity:5,unitCost:12.5}]}));
 await manager.call('purchaseOrder',{id:po.id,version:1,step:'Approve',notes:'Supplier and quantities independently checked'});
 await inventory.call('purchaseOrder',{id:po.id,version:2,step:'Issue'});
 await warehouse.call('purchaseOrder',{id:po.id,version:3,step:'Receive',quantities:[2],receiptReference:`DN-${suffix}-1`});
@@ -42,8 +43,8 @@ const vehicle=await logistics.call('entity',{kind:'vehicles',data:{name:`QA-${su
 const registeredDriver=await logistics.call('entity',{kind:'drivers',data:{name:'Registered Driver',userId:driver.uid,licence:'QA-LICENCE',status:'Available'}});
 await logistics.call('fleetEvent',{vehicleId:vehicle.id,type:'Fuel',cost:25,litres:10,date:'2026-10-07',notes:'Fuel receipt reviewed'});
 assert.equal((await snapshot('vehicles',vehicle.id)).fuelLitres,30);
-const shipmentData={reference:`SHP-${suffix}`,recipient:'QA Receiver',phone:'0123456789',address:'1 Test Road, Kuala Lumpur',handoverReference:'',driver:'',status:'Draft',expectedDelivery:'2026-10-08',parcelCount:2,packed:false,items:[{productId,quantity:3}]};
-const shipment=await logistics.call('save',{kind:'shipments',data:shipmentData});
+const shipmentData={reference:`SHP-${suffix}`,recipient:'QA Receiver',phone:'0123456789',address:'1 Test Road, Kuala Lumpur',handoverReference:'',driver:'',status:'Draft',expectedDelivery:'2099-12-01',parcelCount:2,packed:false,items:[{productId,quantity:3}]};
+const shipment=await createFixtureBusinessRecord(logistics,'shipments',fixtureCreationData('shipments',shipmentData));
 await denied(()=>inventory.call('warehouse',{shipmentId:shipment.id,version:0,data:{step:'Picking',parcelCount:2,notes:'Pick items'}}));
 await assert.rejects(()=>warehouse.call('warehouse',{shipmentId:shipment.id,version:0,data:{step:'HandedOver',parcelCount:2,notes:'Bypass picking'}}),/in order/);
 await warehouse.call('warehouse',{shipmentId:shipment.id,version:0,data:{step:'Picking',parcelCount:2,notes:'QA picking allocation'}});
@@ -103,8 +104,8 @@ if(process.argv.includes('--blockchain')){
 }
 if(process.argv.includes('--browser-fixtures')){
   const extra=[];
-  for(let n=0;n<2;n++)extra.push(await inventory.call('save',{kind:'products',data:{...base,name:`Browser extra ${n}`,sku:`EXTRA-${suffix}-${n}`,barcode:barcode(n+1),quantityOnHand:10}}));
-  const draft=await logistics.call('save',{kind:'shipments',data:{...shipmentData,reference:`MAP-${suffix}`,items:[{productId,quantity:1},...extra.map(p=>({productId:p.id,quantity:1}))]}});
+  for(let n=0;n<2;n++)extra.push(await createFixtureBusinessRecord(inventory,'products',fixtureCreationData('products',{...base,name:`Browser extra ${n}`,sku:`EXTRA-${suffix}-${n}`,barcode:barcode(n+1),quantityOnHand:10})));
+  const draft=await createFixtureBusinessRecord(logistics,'shipments',fixtureCreationData('shipments',{...shipmentData,reference:`MAP-${suffix}`,items:[{productId,quantity:1},...extra.map(p=>({productId:p.id,quantity:1}))]}));
   for(const [version,step] of ['Picking','Packed','HandedOver'].entries())await warehouse.call('warehouse',{shipmentId:draft.id,version,data:{step,parcelCount:2,notes:'Browser fixture warehouse checks'}});
   await logistics.call('planTransport',{shipmentId:draft.id,vehicleId:vehicle.id,driverId:registeredDriver.id,origin:'Warehouse A',carrier:'IILAS Fleet',distanceKm:20,estimatedHours:1,cost:35,plannedDate:'2026-10-08'});
   const ready=await snapshot('shipments',draft.id);await logistics.call('save',{kind:'shipments',data:{...ready,status:'Dispatched'},existing:ready});

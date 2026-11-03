@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+test('bulk reporting cleanup removes only prevalidated owned stress fixtures',async()=>{
+ const {cleanupReportingFixtures}=await import('./reporting-emulator-qa.mjs');assert.equal(typeof cleanupReportingFixtures,'function');const tag='fypqa-'+'a'.repeat(32),rows=new Map(),known=new Set(),scope='scope';
+ for(let i=0;i<2001;i++){const path='products/a_'+tag+'_'+String(i).padStart(i<230?3:4,'0');known.add(path);rows.set(path,{ownerId:scope,category:tag});}for(const suffix of ['before','start','end','after','undated']){const path='stockMovements/'+tag+'-'+suffix;known.add(path);rows.set(path,{ownerId:scope,productId:'owned-product',type:tag.slice(0,40)});}rows.set('products/original',{ownerId:scope,name:'Original'});
+ const ref=path=>({path}),snap=r=>({exists:rows.has(r.path),ref:r,data:()=>structuredClone(rows.get(r.path))}),db={doc:ref,getAll:async(...refs)=>refs.map(snap),runTransaction:async work=>work({get:async r=>snap(r),delete:r=>rows.delete(r.path)})},c={db,tag,scope,productId:'owned-product',known};
+ const first=[...known][0],owned=rows.get(first);rows.set(first,{...owned,category:'changed'});await assert.rejects(()=>cleanupReportingFixtures(c));assert.equal(rows.size,2007);rows.set(first,owned);await cleanupReportingFixtures(c);assert.deepEqual([...rows.keys()],['products/original']);assert.equal(known.size,0);
+});

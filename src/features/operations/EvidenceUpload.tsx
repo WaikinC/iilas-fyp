@@ -1,7 +1,9 @@
-import {useEffect, useRef, useState} from 'react';
-import {getApp} from 'firebase/app';
-import {getStorage, connectStorageEmulator, ref, uploadBytes, getBlob} from 'firebase/storage';
-import {auth} from '../../../lib/firebase';
+import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
+import {ref, uploadBytes, getBlob} from 'firebase/storage';
+import {auth,demoEnvironment} from '../../../lib/firebase';
+import {storage as configuredStorage,sparkTransport} from '../../../lib/firebaseRuntime';
+import {createEvidenceTransport} from '../../../lib/evidenceTransport';
+import {sparkRecoveryKey} from '../../../lib/sparkRuntime';
 import {getActiveWorkspace, workspaceCommand} from '../../../lib/workspace';
 import type {DataRecord} from './Operations';
 import type {Membership} from '../workspace/WorkspaceGate';
@@ -12,19 +14,27 @@ import ParcelAnalysis from './ParcelAnalysis';
 import ParcelLiveCamera from './ParcelLiveCamera';
 import {captureDeclaration, evidenceComposerKey, evidenceProvenance, validateEvidenceFile} from './parcelCapture';
 import './parcelCapture.css';
-let storage:ReturnType<typeof getStorage>|undefined;
-function evidenceStorage(){if(!storage){storage=getStorage(getApp());if(['localhost','127.0.0.1'].includes(location.hostname))connectStorageEmulator(storage,'127.0.0.1',9199);}return storage;}
-export default function EvidenceUpload({shipment,member,stage,evidence}:{shipment:DataRecord;member:Membership;stage:EvidenceStage;evidence:DataRecord[]}){
-  return <EvidenceContext key={evidenceComposerKey(member,shipment,stage)} shipment={shipment} member={member} stage={stage} evidence={evidence}/>;
+import type {EvidenceActivity} from './delivery/deliveryActivity';
+type ActivityReporter=(contextKey:string,activity:EvidenceActivity|null)=>void;
+type ComposerActivity={busy:boolean;hasSelection:boolean;hasPending:boolean};
+function evidenceStorage(){if(!configuredStorage)throw Error('The configured evidence service is unavailable.');return configuredStorage;}
+function evidenceClient(){return createEvidenceTransport({profile:demoEnvironment,auth,command:workspaceCommand,transport:sparkTransport,storage:window.sessionStorage,legacy:{upload:(path,file,metadata)=>uploadBytes(ref(evidenceStorage(),path),file,{contentType:file.type,customMetadata:metadata}),download:path=>getBlob(ref(evidenceStorage(),path))}});}
+export default function EvidenceUpload({shipment,member,stage,evidence,onActivityChange}:{shipment:DataRecord;member:Membership;stage:EvidenceStage;evidence:DataRecord[];onActivityChange?:ActivityReporter}){
+  return <EvidenceContext key={evidenceComposerKey(member,shipment,stage)} shipment={shipment} member={member} stage={stage} evidence={evidence} onActivityChange={onActivityChange}/>;
 }
 type MediaMode='idle'|'manual-camera'|'selection'|'upload'|'live';
-function EvidenceContext({shipment,member,stage,evidence}:{shipment:DataRecord;member:Membership;stage:EvidenceStage;evidence:DataRecord[]}){
+function EvidenceContext({shipment,member,stage,evidence,onActivityChange}:{shipment:DataRecord;member:Membership;stage:EvidenceStage;evidence:DataRecord[];onActivityChange?:ActivityReporter}){
   const [error,setError]=useState(''),[mediaMode,setMediaMode]=useState<MediaMode>('idle'),[type,setType]=useState<string>(stage==='Delivery'?'Proof of Delivery':evidenceTypesForStage(stage)[0]);
+  const contextKey=evidenceComposerKey(member,shipment,stage);
+  const [work,setWork]=useState<ComposerActivity>({busy:false,hasSelection:false,hasPending:false});
+  const reportWork=useCallback((next:ComposerActivity)=>setWork(old=>old.busy===next.busy&&old.hasSelection===next.hasSelection&&old.hasPending===next.hasPending?old:next),[]);
+  useLayoutEffect(()=>{onActivityChange?.(contextKey,{contextKey,shipmentId:shipment.id,stage,mode:mediaMode,...work});},[contextKey,shipment.id,stage,mediaMode,work,onActivityChange]);
+  useLayoutEffect(()=>()=>onActivityChange?.(contextKey,null),[contextKey,onActivityChange]);
   const allowed=member.active&&member.status==='Approved'&&canUploadEvidence({role:member.role,shipmentStatus:String(shipment.status??''),stage,actorUid:member.uid,assignedDriverUid:String(shipment.driverUid??'')});
-  async function open(e:DataRecord){try{const blob=await getBlob(ref(evidenceStorage(),String(e.path)));const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=String(e.name);a.click();URL.revokeObjectURL(url);}catch(e){setError(String(e));}}
-  return <div>{allowed ? <EvidenceComposer shipment={shipment} member={member} stage={stage} type={type} onTypeChange={setType} mediaMode={mediaMode} onMediaChange={setMediaMode}/> : <p>Your current role or shipment status allows viewing evidence only.</p>}
-    {allowed&&type!=='Parcel Image'&&<p>Choose Parcel Image to open live camera analysis. Recorded live sessions remain available below.</p>}
-    <ParcelLiveCamera member={member} shipment={shipment} stage={stage} active={mediaMode==='live'} acquisitionDisabled={type!=='Parcel Image'||!['idle','live'].includes(mediaMode)} onOpen={()=>{if(allowed&&type==='Parcel Image'&&mediaMode==='idle')setMediaMode('live');}} onClose={()=>setMediaMode(mode=>mode==='live'?'idle':mode)}/>
+  async function open(e:DataRecord){try{const blob=await evidenceClient().download({id:e.id,path:String(e.path)});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=String(e.name);a.click();URL.revokeObjectURL(url);}catch(e){setError(String(e));}}
+  return <div>{allowed ? <EvidenceComposer shipment={shipment} member={member} stage={stage} type={type} onTypeChange={setType} mediaMode={mediaMode} onMediaChange={setMediaMode} onActivityStateChange={onActivityChange?reportWork:undefined}/> : <p>Your current role or shipment status allows viewing evidence only.</p>}
+    {demoEnvironment.mode==='local-emulator'&&allowed&&type!=='Parcel Image'&&<p>Choose Parcel Image to open live camera analysis. Recorded live sessions remain available below.</p>}
+    {demoEnvironment.mode!=='local-emulator'?<p>Parcel AI and camera testing remain paused in this cloud demo. Manual evidence files can still be registered.</p>:<ParcelLiveCamera member={member} shipment={shipment} stage={stage} active={mediaMode==='live'} acquisitionDisabled={type!=='Parcel Image'||!['idle','live'].includes(mediaMode)} onOpen={()=>{if(allowed&&type==='Parcel Image'&&mediaMode==='idle')setMediaMode('live');}} onClose={()=>setMediaMode(mode=>mode==='live'?'idle':mode)}/>}
     {error&&<p role="alert" className="error">{error}</p>}
     <div className="evidence-list">{evidence.map(e=>{
       const provenance=evidenceProvenance(e);
@@ -33,7 +43,7 @@ function EvidenceContext({shipment,member,stage,evidence}:{shipment:DataRecord;m
           <div><dt>Registered</dt><dd>{registeredTime(e.createdAt)}</dd></div>
           {provenance.capturedAtClient&&<div><dt>Client capture time</dt><dd>{new Date(provenance.capturedAtClient).toLocaleString()} (unverified device clock)</dd></div>}
         </dl><code>SHA-256: {String(e.sha256)}</code><small>{String(e.bytes)} bytes</small>
-        <ParcelAnalysis member={member} shipment={shipment} evidence={e}/></article>;
+        {demoEnvironment.mode==='local-emulator'&&<ParcelAnalysis member={member} shipment={shipment} evidence={e}/>}</article>;
     })}</div>
   </div>;
 }
@@ -44,12 +54,20 @@ function registeredTime(value:unknown){
 
 type Selection = {file: File; url: string; ready: boolean; captureSource:'file'|'camera'; capturedAtClient:string|null};
 
-function EvidenceComposer({shipment,member,stage,type,onTypeChange,mediaMode,onMediaChange}: {shipment: DataRecord;member:Membership;stage:EvidenceStage;type:string;onTypeChange:(type:string)=>void;mediaMode:MediaMode;onMediaChange:(mode:MediaMode)=>void}) {
+function EvidenceComposer({shipment,member,stage,type,onTypeChange,mediaMode,onMediaChange,onActivityStateChange}: {shipment: DataRecord;member:Membership;stage:EvidenceStage;type:string;onTypeChange:(type:string)=>void;mediaMode:MediaMode;onMediaChange:(mode:MediaMode)=>void;onActivityStateChange?:(state:ComposerActivity)=>void}) {
   const types=evidenceTypesForStage(stage);
   const [selection,setSelection]=useState<Selection|null>(null);
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
   const camera=mediaMode==='manual-camera',liveActive=mediaMode==='live';
   const previewUrl=useRef(''),input=useRef<HTMLInputElement>(null),uploading=useRef(false),active=useRef(true);
+  const isSpark=demoEnvironment.mode==='spark-msi'||demoEnvironment.mode==='spark-loopback-test';
+  const current=()=>{const workspace=getActiveWorkspace();return Boolean(active.current&&auth?.currentUser?.uid===member.uid&&workspace&&evidenceComposerKey(workspace,shipment,stage)===evidenceComposerKey(member,shipment,stage));};
+  const recoveryContext=()=>({member,shipment:{id:shipment.id,version:Number(shipment.version)},declaration:{stage,type,captureSource:'file' as const,capturedAtClient:null},isCurrent:current});
+  function readPending(){if(!isSpark)return false;try{return Boolean(evidenceClient().pending(recoveryContext()));}catch{return true;}}
+  const [hasPending,setHasPending]=useState(()=>{if(demoEnvironment.mode!=='spark-msi'&&demoEnvironment.mode!=='spark-loopback-test')return false;try{return Boolean(window.sessionStorage.getItem(sparkRecoveryKey(demoEnvironment,member.uid,`proof.${member.workspaceId}.${shipment.id}.${stage}`)));}catch{return true;}});
+  useLayoutEffect(()=>{onActivityStateChange?.({busy,hasSelection:selection!==null,hasPending});},[busy,selection,hasPending,onActivityStateChange]);
+  function refreshPending(){setHasPending(readPending());}
+  async function recover(){if(uploading.current)return;uploading.current=true;setBusy(true);setError('');try{const result=await evidenceClient().recover(recoveryContext()) as {state?:string};if(active.current){clearSelection();setMessage(result?.state==='Cancelled'?'The incomplete proof operation was cancelled. Select a file to start a new upload.':'The original proof registration was recovered.');}}catch(e){if(active.current)setError(e instanceof Error?e.message:'Unable to recover the original proof.');}finally{uploading.current=false;if(active.current){setBusy(false);refreshPending();}}}
   useEffect(()=>{active.current=true;return()=>{active.current=false;if(previewUrl.current)URL.revokeObjectURL(previewUrl.current);};},[]);
   function clearSelection(){
     if(previewUrl.current)URL.revokeObjectURL(previewUrl.current);
@@ -82,17 +100,15 @@ function EvidenceComposer({shipment,member,stage,type,onTypeChange,mediaMode,onM
     if(!stillCurrent())throw new Error('Your account access changed. Select the evidence again.');
     validateEvidenceFile(file,type);
     const declaration=validateEvidenceCapture({stage,type,captureSource:selection.captureSource,capturedAtClient:selection.capturedAtClient});
-    const key=crypto.randomUUID(),path=`evidence/${member.workspaceId}/${shipment.id}/${key}`;
-    await uploadBytes(ref(evidenceStorage(),path),file,{contentType:file.type,customMetadata:{actor:member.uid,stage,evidenceType:type,captureSource:declaration.captureSource,capturedAtClient:declaration.capturedAtClient??''}});
-    if(!stillCurrent())return;
-    await workspaceCommand('registerEvidence',{id:key,shipmentId:shipment.id,path,name:file.name,...declaration});
+    await evidenceClient().uploadAndRegister({member,shipment:{id:shipment.id,version:Number(shipment.version)},declaration,file,isCurrent:()=>Boolean(stillCurrent())});
     if(!active.current)return;
     clearSelection();uploaded=true;setMessage('Evidence uploaded. No AI condition result has been generated.');
     }catch(cause){if(active.current)setError(cause instanceof Error?cause.message:'Unable to upload evidence.');}
-    finally{uploading.current=false;if(active.current){setBusy(false);onMediaChange(uploaded?'idle':'selection');}}
+    finally{uploading.current=false;if(active.current){setBusy(false);onMediaChange(uploaded?'idle':'selection');refreshPending();}}
   }
   return <div className="parcel-evidence">
     <p className="parcel-stage-label"><b>Evidence stage: {stage}</b>{stage==='Pre-dispatch'?' · Prepared shipment before dispatch':' · Dispatched shipment'}</p>
+    {isSpark&&hasPending&&<p>A proof operation is saved for this shipment. <button type="button" disabled={busy} onClick={recover}>Recover saved proof</button> Recovery checks the original outcome and can cancel an expired or stale incomplete upload before you choose another file.</p>}
     <div className="operations-form">
       <label>Evidence type<select aria-label="Evidence type" value={type} disabled={busy||liveActive||types.length===1} onChange={event=>{clearSelection();setError('');setMessage('');onTypeChange(event.target.value);}}>{types.map(value=><option key={value}>{value}</option>)}</select></label>
       <label>Evidence file<input ref={input} aria-label="Evidence file" type="file" disabled={busy||camera||liveActive} accept={type==='Parcel Image'?'image/jpeg,image/png,image/webp':'image/jpeg,image/png,image/webp,application/pdf'} onChange={event=>choose(event.target.files?.[0]||null)}/></label>

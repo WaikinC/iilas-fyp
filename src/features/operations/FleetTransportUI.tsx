@@ -1,0 +1,6 @@
+import type{KeyboardEvent}from'react';import{statusTone}from'./fleetTransportPresentation';
+export function OperationalStatus({label,prefix}:{label:string;prefix?:string}){return <span className={`ft-status ft-status--${statusTone(label)}`} data-tone={statusTone(label)}>{prefix&&<span className="ft-status-prefix">{prefix}: </span>}<span>{label}</span></span>;}
+export function OperationalTabs({prefix,label,tabs,active,onChange}:{prefix:string;label:string;tabs:readonly{id:string;label:string}[];active:string;onChange:(id:string)=>void}){
+ function key(e:KeyboardEvent<HTMLButtonElement>,index:number){let next=index;if(e.key==='ArrowRight')next=(index+1)%tabs.length;else if(e.key==='ArrowLeft')next=(index+tabs.length-1)%tabs.length;else if(e.key==='Home')next=0;else if(e.key==='End')next=tabs.length-1;else return;e.preventDefault();onChange(tabs[next].id);requestAnimationFrame(()=>document.getElementById(`${prefix}-tab-${tabs[next].id}`)?.focus());}
+ return <div role="tablist" aria-label={label} className="ft-tabs">{tabs.map((tab,i)=><button key={tab.id} type="button" role="tab" id={`${prefix}-tab-${tab.id}`} aria-controls={`${prefix}-panel-${tab.id}`} aria-selected={active===tab.id} tabIndex={active===tab.id?0:-1} onClick={()=>onChange(tab.id)} onKeyDown={e=>key(e,i)}>{tab.label}</button>)}</div>;
+}

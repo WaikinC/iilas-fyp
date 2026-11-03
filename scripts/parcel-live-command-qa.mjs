@@ -10,6 +10,7 @@ const hash=x=>createHash('sha256').update(x).digest('hex');
 const jpeg=Buffer.from([255,216,255,192,0,11,8,0,1,0,1,1,1,17,0,255,218,0,8,1,1,0,0,63,0,1,255,217]);
 const pin={model:'MobileNetV2',modelVersion:'a'.repeat(64),selectionSha256:'b'.repeat(64),evaluationSha256:'c'.repeat(64),acceptanceSha256:'d'.repeat(64),preprocessing:'rgb-224-unit',contrast:'none',classOrder:['Normal','Damaged'],intendedUse:'sampled-live',policyVersion:'parcel-live-v1',policySha256:'50f4160d21f584110bbb7d68a6ff6552c2efe83bd14b119282d4b7a1e9217121'};
 let rows,revisions,clock,acceptance,writes,calls,objects,fetchWork,writeWork,readHook,readWork,metadataWork,requireTransportBounds,ackWork,commitHook,retryHook;
+let localModel=null;
 acceptance={...pin};
 const doc=path=>({path});
 const put=(path,value)=>{rows.set(path,structuredClone(value));revisions.set(path,(revisions.get(path)||0)+1);};
@@ -29,6 +30,7 @@ mock.method(require('firebase-admin/storage'),'getStorage',()=>({bucket:()=>({fi
   async getMetadata(){return [await metadataWork(path,options)];},createReadStream(){return readWork(path,options);}
 })})}));
 mock.module(new URL('../backend/functions/parcelLiveAcceptance.mjs',import.meta.url).href,{namedExports:{parcelLiveAcceptance:acceptance,requireParcelLiveAcceptance(value){if(!value?.acceptanceSha256||value.intendedUse!=='sampled-live')throw Error('closed');return structuredClone(value);}}});
+mock.module(new URL('../backend/functions/parcelLocalEvaluation.mjs',import.meta.url).href,{namedExports:{selectParcelLocalEvaluationModel:()=>localModel&&structuredClone(localModel),isParcelLocalEvaluationModel:m=>m?.evaluationKind==='local-experimental',assertParcelLocalEvaluationAuthority(m){if(m&&(Object.hasOwn(m,'evaluationKind')||Object.hasOwn(m,'evaluationManifestSha256')||m.acceptanceSha256===null)&&(!localModel||JSON.stringify(m)!==JSON.stringify(localModel)))throw Object.assign(new Error('Local evaluation unavailable'),{code:'unavailable'});}}});
 const {executeCommand}=await import('../backend/functions/service.mjs');
 const command=(action,input,uid='staff')=>executeCommand({uid},{action,input,workspaceId:'scope'});
 const start=(operationId=randomUUID(),uid='staff',shipmentId='shipment',stage='Pre-dispatch')=>command('startParcelLiveSession',{shipmentId,stage,operationId},uid);
@@ -38,6 +40,7 @@ const analyse=(f,b=jpeg)=>command('analyseParcelLiveFrame',{sessionId:f.sessionI
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
 const result=body=>({...pin,operationally_approved:true,humanReviewRequired:true,confidenceMeaning:'uncalibrated',evidenceSha256:hash(jpeg),sessionId:body.sessionId,frameId:body.frameId,sequence:body.sequence,probabilities:[.2,.8],confidence:.8,label:'Damaged',status:'predicted',processingTimeMs:2,totalProcessingTimeMs:3,requestId:randomUUID()});
 beforeEach(()=>{
+  localModel=null;
   rows=new Map();revisions=new Map();objects=new Map();clock=100000;writes=0;calls=0;readHook=null;commitHook=null;retryHook=null;requireTransportBounds=false;Date.now=()=>clock;
   for(const k of Object.keys(acceptance))delete acceptance[k];Object.assign(acceptance,pin);
   process.env.RESEARCH_API_URL='http://fixture.invalid';process.env.RESEARCH_API_TOKEN=randomUUID();
@@ -47,6 +50,28 @@ beforeEach(()=>{
   metadataWork=async(path)=>objects.get(path)||Promise.reject(Error('private-object-error'));
   readWork=path=>Readable.from([objects.get(path)?.buffer||Buffer.alloc(0)]);
   fetchWork=async(_url,opts)=>new Response(JSON.stringify(result(JSON.parse(opts.body))));globalThis.fetch=async(...a)=>{calls++;return fetchWork(...a);};
+});
+
+function enableLocal(){for(const k of Object.keys(acceptance))delete acceptance[k];localModel={...pin,acceptanceSha256:null,evaluationKind:'local-experimental',evaluationManifestSha256:'f'.repeat(64)};fetchWork=async(_url,opts)=>new Response(JSON.stringify({...result(JSON.parse(opts.body)),...localModel,operationally_approved:false,evaluationOnly:true,runtimeMode:'local-evaluation'}));}
+test('local live false/null frame retains experiment through Accepted review and replay',async()=>{enableLocal();const s=await start(),f=await reserve(s),out=await analyse(f);assert.equal(out.state,'Predicted');assert.equal(out.model.acceptanceSha256,null);const reviewed=await command('reviewParcelLiveFrame',{sessionId:s.sessionId,frameId:f.frameId,version:out.version,decision:'Accepted',notes:'Visible packaging inspected'},'admin');assert.equal(reviewed.model.evaluationKind,'local-experimental');assert.equal(reviewed.reviewStatus,'Accepted');assert.equal((await analyse(f)).reviewStatus,'Accepted');});
+test('disabled local live capability rejects replay, resolve, review and Blocked replay before I/O',async()=>{enableLocal();const op=randomUUID(),s=await start(op),f=await reserve(s),out=await analyse(f),blockedOp=randomUUID();assert.equal((await start(blockedOp)).state,'Busy');localModel=null;for(const [action,input] of [['startParcelLiveSession',{shipmentId:'shipment',stage:'Pre-dispatch',operationId:op}],['startParcelLiveSession',{shipmentId:'shipment',stage:'Pre-dispatch',operationId:blockedOp}],['resolveParcelLiveSession',{sessionId:s.sessionId}],['resolveParcelLiveFrame',{sessionId:s.sessionId,frameId:f.frameId}],['reviewParcelLiveFrame',{sessionId:s.sessionId,frameId:f.frameId,version:out.version,decision:'Accepted',notes:'Visible packaging inspected'}]])await assert.rejects(command(action,input,action==='startParcelLiveSession'?'staff':'admin'));await assert.rejects(analyse(f));assert.equal(calls,1);assert.equal(writes,1);});
+test('idle Open experimental live cleanup survives authority transition and expiry without granting old results',async()=>{
+  enableLocal();const s=await start();assert.deepEqual(await command('cleanupParcelLiveSession',{sessionId:s.sessionId}),{released:false});localModel={...localModel,evaluationManifestSha256:'e'.repeat(64)};clock=s.expiresAt;
+  await assert.rejects(command('resolveParcelLiveSession',{sessionId:s.sessionId}));await assert.rejects(command('stopParcelLiveSession',{sessionId:s.sessionId}));await assert.rejects(start());
+  assert.deepEqual(await command('cleanupParcelLiveSession',{sessionId:s.sessionId}),{released:true});assert.equal(records('parcelLiveActorLocks').length,0);assert.equal(records('parcelLiveSessions')[0].state,'Expired');await assert.rejects(command('resolveParcelLiveSession',{sessionId:s.sessionId}),e=>e.code==='unavailable');await assert.rejects(start(s.operationId),e=>e.code==='unavailable');
+  const next=await start();assert.equal(next.state,'Open');const lock=structuredClone(records('parcelLiveActorLocks')[0]);assert.deepEqual(await command('cleanupParcelLiveSession',{sessionId:s.sessionId}),{released:true});assert.deepEqual(records('parcelLiveActorLocks')[0],lock);assert.equal(writes+calls,0);
+});
+test('Reserved un-ingested experimental frame cleanup preserves preceding retained evidence and permits deliberate new session',async()=>{
+  enableLocal();const s=await start(),first=await reserve(s),predicted=await analyse(first),retained=structuredClone([...objects]),firstRecord=structuredClone(records('parcelLiveFrames')[0]);clock+=5000;const reserved=await reserve({...s,reservedCount:1});
+  localModel={...localModel,evaluationManifestSha256:'e'.repeat(64)};clock=s.expiresAt;const before=[writes,calls];assert.deepEqual(await command('cleanupParcelLiveSession',{sessionId:s.sessionId},'admin'),{released:true});
+  assert.deepEqual([writes,calls],before);assert.deepEqual(structuredClone([...objects]),retained);assert.deepEqual(records('parcelLiveFrames').find(f=>f.frameId===first.frameId),firstRecord);const closed=records('parcelLiveFrames').find(f=>f.frameId===reserved.frameId);assert.equal(closed.state,'Expired');assert.equal(closed.label,null);assert.equal(closed.retention,'Unverified');assert.equal(records('parcelLiveActorLocks').length,0);
+  await assert.rejects(command('reviewParcelLiveFrame',{sessionId:s.sessionId,frameId:first.frameId,version:predicted.version,decision:'Accepted',notes:'Old authority still denied'},'admin'));assert.equal((await start()).state,'Open');
+});
+test('live null cleanup retains creator/reviewer scope, exact nonce/generation and reciprocal context fences',async()=>{
+  enableLocal();const s=await start();localModel=null;put('users/other',{uid:'other',role:'Warehouse',status:'Approved',active:true,version:1});await assert.rejects(command('cleanupParcelLiveSession',{sessionId:s.sessionId},'other'));await assert.rejects(executeCommand({uid:'staff'},{action:'cleanupParcelLiveSession',input:{sessionId:s.sessionId},workspaceId:'wrong-scope'}));await assert.rejects(command('cleanupParcelLiveSession',{sessionId:s.sessionId,model:null}));
+  const [lockPath,lock]=[...rows].find(([k])=>k.startsWith('parcelLiveActorLocks/'));for(const patch of [{nonce:randomUUID()},{generation:2}]){put(lockPath,{...lock,...patch});await assert.rejects(command('cleanupParcelLiveSession',{sessionId:s.sessionId},'admin'));assert.equal(records('parcelLiveSessions')[0].state,'Open');}put(lockPath,lock);
+  const [receiptPath,receipt]=[...rows].find(([k])=>k.startsWith('parcelLiveStartRequests/'));put(receiptPath,{...receipt,snapshot:{...receipt.snapshot,shipment:{...receipt.snapshot.shipment,ownerId:'other'}}});await assert.rejects(command('cleanupParcelLiveSession',{sessionId:s.sessionId},'admin'));put(receiptPath,receipt);
+  put('users/manager',{uid:'manager',role:'Manager',status:'Approved',active:true,version:1});assert.deepEqual(await command('cleanupParcelLiveSession',{sessionId:s.sessionId},'manager'),{released:true});assert.equal(records('parcelLiveSessions')[0].state,'Stale');assert.equal(writes+calls,0);
 });
 test('closed pin persists Unavailable with no active lock or image I/O and durable replay',async()=>{
   delete acceptance.acceptanceSha256;const op=randomUUID(),s=await start(op);assert.equal(s.state,'Unavailable');assert.equal(s.model,null);assert.equal(writes+calls,0);assert.equal(records('parcelLiveActorLocks').length,0);put('users/staff',{...rows.get('users/staff'),role:'Viewer',version:2});assert.deepEqual(await start(op),s);await assert.rejects(start(op,'staff','different'));

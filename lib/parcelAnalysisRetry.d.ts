@@ -1,5 +1,5 @@
 import type {EvidenceStage} from './parcelEvidence.js';
-import type {ParcelAnalysisStartInput,ParcelAnalysisResolveInput,ParcelAnalysisPublic} from './parcelAnalysis.js';
+import type {ParcelAnalysisStartInput,ParcelAnalysisResolveInput,ParcelAnalysisCleanupInput,ParcelAnalysisPublic} from './parcelAnalysis.js';
 export interface ParcelAnalysisIntent {scopeId:string;actorUid:string;evidenceId:string;operationId:string;}
 /** Stage fences the active UI but is never persisted. */
 export interface ParcelAnalysisRetryContext {scopeId:string;actorUid:string;evidenceId:string;stage:EvidenceStage;}
@@ -8,6 +8,7 @@ export type ParcelAnalysisRetryResult=ParcelAnalysisPublic|ParcelAnalysisBusy;
 export interface ParcelAnalysisCommand {
   (name:'startParcelAnalysis',input:ParcelAnalysisStartInput):Promise<ParcelAnalysisRetryResult>;
   (name:'resolveParcelAnalysis',input:ParcelAnalysisResolveInput):Promise<ParcelAnalysisPublic>;
+  (name:'cleanupParcelAnalysis',input:ParcelAnalysisCleanupInput):Promise<{released:boolean}>;
 }
 export interface ParcelAnalysisSessionStorage {getItem(key:string):string|null;setItem(key:string,value:string):void;removeItem(key:string):void;}
 export interface ParcelAnalysisRetry {
@@ -19,6 +20,9 @@ export interface ParcelAnalysisRetry {
    * to discover the authoritative public ID; backend must replay before new-work
    * stage/role checks. No saved intent -> rejects without a command. */
   check():Promise<ParcelAnalysisRetryResult>;
+  /** Captured pending operation is bound by its private server receipt. A true
+   * wire ack clears only an unchanged exact local intent, including after reload. */
+  cleanup(record:ParcelAnalysisPublic):Promise<{released:boolean;recoveryComplete:boolean}>;
   /** Call on actor/scope/evidence/stage changes, including permission remounts.
    * Late responses reject even if context subsequently changes back. */
   setContext(context:ParcelAnalysisRetryContext):void;

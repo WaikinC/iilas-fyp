@@ -14,6 +14,17 @@ const frame=()=>({ownerId:'scope',sessionId,frameId,sequence:1,actorUid:'actor',
 const verified=()=>({generation:'123',metageneration:'1',sha256:sha,bytes:3,width:960,height:480,contentType:'image/jpeg'});
 const predicted=()=>({...frame(),state:'Predicted',version:3,updatedAt:now+20,completedAt:now+20,retention:'Verified',image:verified(),label:'Normal',probabilities:[0.8,0.2],confidence:0.8,confidenceMeaning:'uncalibrated',serviceRequestId:operationId,processingTimeMs:1,totalProcessingTimeMs:2,humanReviewRequired:true,reviewStatus:'Pending'});
 
+test('experimental live model remains false-authority after DTO roundtrip and Accepted review',()=>{
+  const experimental={...model(),acceptanceSha256:null,evaluationKind:'local-experimental',evaluationManifestSha256:sha};
+  assert.deepEqual(live.toPublicParcelLiveSession({...session(),model:experimental}).model,experimental);
+  const result=live.toPublicParcelLiveFrame({...predicted(),model:experimental});
+  const reviewed=live.reviewParcelLiveFrameRecord(result,{sessionId,frameId,version:3,decision:'Accepted',notes:'Visible face inspected'},{role:'Admin',reviewerUid:'admin',nowMs:now+30});
+  assert.deepEqual(live.toPublicParcelLiveFrame(JSON.parse(JSON.stringify(reviewed))).model,experimental);
+  for(const patch of [{evaluationKind:null},{evaluationManifestSha256:null},{acceptanceSha256:sha}])assert.throws(()=>live.toSafeParcelLiveModel({...experimental,...patch}));
+  assert.throws(()=>live.toSafeParcelLiveModel({...model(),evaluationManifestSha256:sha}));
+  for(const patch of [{evaluationOnly:true},{runtimeMode:'local-evaluation'},{operationally_approved:false}])assert.throws(()=>live.toSafeParcelLiveModel({...model(),...patch}));
+});
+
 test('live contract exports exist before any implementation',()=>{
   for(const name of ['validateStartParcelLiveSession','toPublicParcelLiveSession','toPublicParcelLiveFrame','parcelLiveIngestDigest'])assert.equal(typeof live[name],'function',`${name} is required`);
 });

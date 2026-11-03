@@ -1,0 +1,10 @@
+import {completionUUID,completionIdentifier,completionCanonical} from '../lib/completionWorkflow.js';
+export function validateDemoFixturePlan(raw){
+ if(!raw||completionCanonical(raw)!==completionCanonical(planDemoFixture({runId:raw.runId,primaryAdminUid:raw.primaryAdminUid})))throw Error('Only the exact anonymous curated fixture plan is accepted.');return raw;
+}
+export function planDemoFixture({runId,primaryAdminUid}){
+ completionUUID(runId);completionIdentifier(primaryAdminUid);const prefix='hybrid_'+runId.replaceAll('-',''),documents=[];
+ for(let i=1;i<=3;i++)documents.push({collection:'products',id:prefix+'_product_'+i,data:{ownerId:primaryAdminUid,name:'Demo packing item '+i,sku:'FYP-'+prefix.slice(-8)+'-'+i,barcode:'',category:'Demonstration',status:'Active',location:'DEMO-A',quantityOnHand:0,reservedQuantity:0,warehouseReservedQuantity:0,reorderLevel:10+i*5,version:1}});
+ documents.push({collection:'suppliers',id:prefix+'_supplier',data:{ownerId:primaryAdminUid,name:'FYP demonstration supplier',contact:'Demonstration only',email:'',phone:'',address:'',status:'Active',version:1}});
+ return {schema:'iilas-hybrid-fixture-plan-1.0',runId,primaryAdminUid,documents,objects:[{id:prefix+'_ordinary_pdf',name:'anonymous-proof.pdf',contentType:'application/pdf',purpose:'Anonymous software proof fixture; upload through assigned delivery workflow, never as parcel evaluation data.'}],roles:{required:['Admin','Manager','Driver','Customer'],optional:['Inventory','Warehouse','Logistics','Viewer']},expectedCounts:{documents:documents.length,objects:1,products:3,suppliers:1},recipes:['Record demonstration stock receipts before allocation; no historical stock is invented.','Use separate manager review, linked purchase order, approval, issue and partial/full receipt.','Prepare a new shipment through warehouse handover, assign/dispatch, then use delivery risk and rules review.','Upload the anonymous proof through the assigned delivery workflow; grant only this shipment to the demo Customer.'],retained:true};
+}

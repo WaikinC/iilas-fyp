@@ -1,3 +1,4 @@
+import{createFixtureBusinessRecord,fixtureCreationData}from'./record-creation-fixtures.mjs';
 // Isolated emulator scenarios. Never migrate personal inventories or production data.
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
@@ -14,7 +15,7 @@ const bad=async(fn,pattern)=>{await assert.rejects(fn,pattern);checks++;};
 const denied=fn=>bad(fn,e=>/permission-denied/.test(e.code));
 const inventory=await client('Inventory'),manager=await client('Manager'),warehouse=await client('Warehouse'),viewer=await client('Viewer'),logistics=await client('Logistics'),driver=await client('Driver'),outsider=await client('Outsider',false);
 const product=async(name,quantityOnHand=20)=>{
- const {id}=await inventory.call('save',{kind:'products',data:{name:`${name} ${suffix}`,sku:`LOC-${suffix}-${ordinal}`,barcode:barcode(ordinal++),category:'QA',location:'A-01',reorderLevel:3,quantityOnHand,reservedQuantity:0,status:'Active',imageDataUrl:''}});return id;
+ const {id}=await createFixtureBusinessRecord(inventory,'products',fixtureCreationData('products',{name:`${name} ${suffix}`,sku:`LOC-${suffix}-${ordinal}`,barcode:barcode(ordinal++),category:'QA',location:'A-01',reorderLevel:3,quantityOnHand,reservedQuantity:0,status:'Active',imageDataUrl:''}));return id;
 };
 const command=(productId,type,quantity,extra={})=>({productId,type,quantity,reason:'Physical count and location checked',reference:`LOC-${suffix}`,operationId:randomUUID(),...extra});
 const move=(id,type,quantity,extra={},actor=inventory)=>actor.call('stock',command(id,type,quantity,extra));
@@ -23,7 +24,7 @@ const review=(id,decision='Approve',actor=manager)=>actor.call('approval',{id,ve
 const rows=async id=>(await snapshot('products',id)).locationBalances.map(r=>[r.location,r.quantity,r.reserved,r.warehouse]);
 const digest=r=>createHash('sha256').update(canonicalRecord('inventory',r)).digest('hex');
 const movementCount=async id=>(await fixtureDB.collection('stockMovements').where('productId','==',id).get()).size;
-const draft=async(id,quantity,label)=>{const {id:key}=await logistics.call('save',{kind:'shipments',data:{reference:`LOC-${suffix}-${label}`,recipient:'Location QA receiver',phone:'0123456789',address:'Warehouse A Kuala Lumpur',expectedDelivery:'2026-10-10',driver:'',handoverReference:'',packed:false,status:'Draft',parcelCount:1,items:[{productId:id,quantity}]}});return key;};
+const draft=async(id,quantity,label)=>{const {id:key}=await createFixtureBusinessRecord(logistics,'shipments',fixtureCreationData('shipments',{reference:`LOC-${suffix}-${label}`,recipient:'Location QA receiver',phone:'0123456789',address:'Warehouse A Kuala Lumpur',expectedDelivery:'2099-12-01',driver:'',handoverReference:'',packed:false,status:'Draft',parcelCount:1,items:[{productId:id,quantity}]}));return key;};
 const step=(shipmentId,stage,version)=>warehouse.call('warehouse',{shipmentId,version,data:{step:stage,notes:'Bin quantities physically checked',parcelCount:1}});
 let registeredDriver;
 async function dispatch(shipmentId){

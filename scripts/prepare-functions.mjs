@@ -1,4 +1,16 @@
 import {copyFile} from 'node:fs/promises';
+await copyFile(new URL('../lib/businessCodes.js',import.meta.url),new URL('../backend/functions/businessCodes.js',import.meta.url));
+await copyFile(new URL('../lib/recordCreation.js',import.meta.url),new URL('../backend/functions/recordCreation.js',import.meta.url));
+await copyFile(new URL('../lib/demoEnvironment.js',import.meta.url),new URL('../backend/functions/demoEnvironment.js',import.meta.url));
+await copyFile(new URL('../lib/hybridGateway.js',import.meta.url),new URL('../backend/functions/hybridGateway.js',import.meta.url));
+await copyFile(new URL('../lib/mobileDelivery.js',import.meta.url),new URL('../backend/functions/mobileDelivery.js',import.meta.url));
+await copyFile(new URL('../lib/reporting.js',import.meta.url),new URL('../backend/functions/reporting.js',import.meta.url));
+await copyFile(new URL('../lib/reportStatistics.js',import.meta.url),new URL('../backend/functions/reportStatistics.js',import.meta.url));
+await copyFile(new URL('../lib/reportStatisticsMetrics.js',import.meta.url),new URL('../backend/functions/reportStatisticsMetrics.js',import.meta.url));
+await copyFile(new URL('../lib/accountRoles.js',import.meta.url),new URL('../backend/functions/accountRoles.js',import.meta.url));
+await copyFile(new URL('../lib/completionWorkflow.js',import.meta.url),new URL('../backend/functions/completionWorkflow.js',import.meta.url));
+await copyFile(new URL('../lib/integrityWorkflow.js',import.meta.url),new URL('../backend/functions/integrityWorkflow.js',import.meta.url));
+await copyFile(new URL('../lib/transportPlanning.js',import.meta.url),new URL('../backend/functions/transportPlanning.js',import.meta.url));
 await copyFile(new URL('../lib/validation.js',import.meta.url),new URL('../backend/functions/validation.js',import.meta.url));
 await copyFile(new URL('../lib/procurementValidation.js',import.meta.url),new URL('../backend/functions/procurementValidation.js',import.meta.url));
 await copyFile(new URL('../lib/locationStock.js',import.meta.url),new URL('../backend/functions/locationStock.js',import.meta.url));
@@ -6,4 +18,10 @@ await copyFile(new URL('../lib/integrity.js',import.meta.url),new URL('../backen
 await copyFile(new URL('../lib/parcelEvidence.js',import.meta.url),new URL('../backend/functions/parcelEvidence.js',import.meta.url));
 await copyFile(new URL('../lib/parcelAnalysis.js',import.meta.url),new URL('../backend/functions/parcelAnalysis.js',import.meta.url));
 await copyFile(new URL('../lib/parcelLive.js',import.meta.url),new URL('../backend/functions/parcelLive.js',import.meta.url));
+await copyFile(new URL('../lib/inventoryRisk.js',import.meta.url),new URL('../backend/functions/inventoryRisk.js',import.meta.url));
+await copyFile(new URL('../lib/inventoryAI.js',import.meta.url),new URL('../backend/functions/inventoryAI.js',import.meta.url));
+await copyFile(new URL('../lib/inventoryContextAI.js',import.meta.url),new URL('../backend/functions/inventoryContextAI.js',import.meta.url));
 console.log('Shared validation prepared for Firebase Functions.');
+await copyFile(new URL('../lib/deliveryRiskDemo.js',import.meta.url),new URL('../backend/functions/deliveryRiskDemo.js',import.meta.url));
+await copyFile(new URL('../lib/inventoryDemoReorder.js',import.meta.url),new URL('../backend/functions/inventoryDemoReorder.js',import.meta.url));
+await copyFile(new URL('../lib/inventoryDemoProcurement.js',import.meta.url),new URL('../backend/functions/inventoryDemoProcurement.js',import.meta.url));

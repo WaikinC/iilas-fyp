@@ -17,6 +17,18 @@ const latestPredictions = (records: DashboardRow[], kind: string) => {
   return [...latest.values()];
 };
 
+// Individual review never supplies model acceptance. Require reciprocal,
+// complete operational provenance, including when only one copy was altered.
+const operationalParcelModel = (value: unknown): value is Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const model=value as Record<string,unknown>;
+  return !['evaluationKind','evaluationManifestSha256','evaluationOnly','runtimeMode'].some(key=>Object.hasOwn(model,key)) &&
+    model.operationally_approved !== false && model.model === 'MobileNetV2' &&
+    ['modelVersion','selectionSha256','evaluationSha256','acceptanceSha256'].every(key=>typeof model[key]==='string' && /^[a-f0-9]{64}$/.test(model[key] as string)) &&
+    typeof model.preprocessing==='string' && /^[A-Za-z0-9][A-Za-z0-9_. -]{0,255}$/.test(model.preprocessing) &&
+    ['none','clahe'].includes(String(model.contrast)) && Array.isArray(model.classOrder) && model.classOrder.length===2 && model.classOrder[0]==='Normal' && model.classOrder[1]==='Damaged';
+};
+
 export function dashboardSummary(products: DashboardRow[], shipments: DashboardRow[], records: DashboardRecords, now: number) {
   const activeProducts = products.filter(p => p.status === 'Active');
   const lowStock = activeProducts.filter(p => Number(p.quantityOnHand ?? 0) - Number(p.reservedQuantity ?? 0) <= Number(p.reorderLevel ?? 0));
@@ -33,9 +45,12 @@ export function dashboardSummary(products: DashboardRow[], shipments: DashboardR
   const currentParcelPredictions = latestPredictions(records.predictions, 'parcel').filter(p => {
     const evidence = records.evidence.find(e => e.id === p.recordId);
     const analysis = records.parcelAnalyses?.find(a => a.analysisId === p.analysisId && a.id === p.analysisId);
+    const model=analysis?.model;
     const shipment = shipments.find(s => s.id === evidence?.shipmentId);
     const stageCurrent = evidence?.stage === 'Pre-dispatch' && shipment?.status === 'Prepared' || evidence?.stage === 'Delivery' && shipment?.status === 'Dispatched';
-    return evidence?.type === 'Parcel Image' && stageCurrent && analysis?.state === 'Predicted' &&
+    return operationalParcelModel(p) && operationalParcelModel(model) &&
+      ['model','modelVersion','selectionSha256','evaluationSha256','acceptanceSha256','preprocessing','contrast'].every(key=>p[key]===model[key]) &&
+      evidence?.type === 'Parcel Image' && stageCurrent && analysis?.state === 'Predicted' &&
       p.reviewStatus === 'Accepted' && analysis.reviewStatus === 'Accepted' &&
       ['Normal', 'Damaged'].includes(String(p.label)) && p.label === analysis.label &&
       analysis.predictionId === p.id && p.sourceVersion === evidence.version && analysis.evidenceVersion === evidence.version &&

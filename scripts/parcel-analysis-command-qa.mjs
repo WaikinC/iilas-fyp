@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {Readable} from 'node:stream';
 import {createRequire} from 'node:module';
+import {createParcelAnalysisRetry} from '../lib/parcelAnalysisRetry.js';
 
 // External doubles only: the real command dispatcher, access checks, validators
 // and lifecycle run unchanged. Transactions enforce read-before-write and retry
 // conflicts against independently committed document revisions.
 let rows, revisions, storageReads, calls, clock, fetchWork, streamWork, metadataWork, retryOnce,readHook,orderedMaps;
+let localModel=null;
 const realNow=Date.now;
 const test=(name,fn)=>baseTest(name,{timeout:2000},fn);
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -36,6 +38,7 @@ mock.method(require('firebase-admin/firestore').FieldValue,'serverTimestamp',()=
 mock.method(require('firebase-admin/auth'),'getAuth',()=>({getUser:async uid=>({uid,email:'fixture@example.test',emailVerified:true,disabled:false})}));
 mock.method(require('firebase-admin/storage'),'getStorage',()=>({bucket:()=>({file:path=>({async getMetadata(){storageReads++;return [await metadataWork(path)];},createReadStream(){storageReads++;return streamWork(path);}})})}));
 mock.module(new URL('../backend/functions/parcelAcceptance.mjs',import.meta.url).href,{namedExports:{parcelAcceptance:acceptance}});
+mock.module(new URL('../backend/functions/parcelLocalEvaluation.mjs',import.meta.url).href,{namedExports:{selectParcelLocalEvaluationModel:()=>localModel&&structuredClone(localModel),isParcelLocalEvaluationModel:m=>m?.evaluationKind==='local-experimental',assertParcelLocalEvaluationAuthority(m){if(m&&(Object.hasOwn(m,'evaluationKind')||Object.hasOwn(m,'evaluationManifestSha256')||m.acceptanceSha256===null)&&(!localModel||JSON.stringify(sorted(m))!==JSON.stringify(sorted(localModel))))throw Object.assign(new Error('Local evaluation unavailable'),{code:'unavailable'});}}});
 const {executeCommand}=await import('../backend/functions/service.mjs');
 const command=(action,input,uid='staff')=>executeCommand({uid},{action,input,workspaceId:'scope'});
 const start=(evidenceId='photo',operationId=randomUUID(),uid='staff')=>command('startParcelAnalysis',{evidenceId,operationId},uid);
@@ -44,6 +47,7 @@ const result=(changes={})=>({operationally_approved:true,humanReviewRequired:tru
 const response=value=>new Response(JSON.stringify(value),{status:200});
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};}
 beforeEach(()=>{
+  localModel=null;
   rows=new Map();revisions=new Map();storageReads=0;calls=0;clock=100000;retryOnce=false;readHook=null;orderedMaps=false;
   Date.now=()=>clock;
   Object.keys(acceptance).forEach(key=>delete acceptance[key]);Object.assign(acceptance,pin);
@@ -55,6 +59,119 @@ beforeEach(()=>{
   metadataWork=()=>({size:String(bytes.length),contentType:'image/png'});
   streamWork=()=>Readable.from([bytes]);fetchWork=async()=>response(result());
   globalThis.fetch=async(...args)=>{calls++;return fetchWork(...args);};
+});
+
+function enableLocal(){for(const k of Object.keys(acceptance))delete acceptance[k];const base={...pin};delete base.intendedUse;localModel={...base,acceptanceSha256:null,evaluationKind:'local-experimental',evaluationManifestSha256:'f'.repeat(64)};fetchWork=async()=>response(result({...localModel,intendedUse:'registered-photo',operationally_approved:false,evaluationOnly:true,runtimeMode:'local-evaluation'}));}
+test('local false/null analysis persists reciprocal experimental prediction and human review',async()=>{enableLocal();const op=randomUUID(),out=await start('photo',op);assert.equal(out.state,'Predicted');assert.equal(out.model.acceptanceSha256,null);assert.equal(records('predictions')[0].evaluationKind,'local-experimental');assert.deepEqual(await start('photo',op),out);const reviewed=await command('reviewParcelAnalysis',{analysisId:out.analysisId,version:2,decision:'Accepted',notes:'Visible packaging inspected'},'admin');assert.equal(reviewed.model.evaluationKind,'local-experimental');assert.equal(reviewed.reviewStatus,'Accepted');});
+test('disabled local capability rejects saved replay, resolve, linked review, abstention review and Blocked replay',async()=>{enableLocal();const op=randomUUID(),out=await start('photo',op),model=localModel;localModel=null;await assert.rejects(start('photo',op));await assert.rejects(command('resolveParcelAnalysis',{analysisId:out.analysisId}));await assert.rejects(command('reviewParcelAnalysis',{analysisId:out.analysisId,version:2,decision:'Accepted',notes:'Visible packaging inspected'},'admin'));assert.equal(records('predictions')[0].reviewStatus,'Pending');localModel=model;const entered=deferred(),gate=deferred();fetchWork=async()=>{entered.resolve();await gate.promise;return response(result({...model,intendedUse:'registered-photo',operationally_approved:false,evaluationOnly:true,runtimeMode:'local-evaluation'}));};const running=start();await entered.promise;const blockedOp=randomUUID();assert.equal((await start('photo',blockedOp)).state,'Busy');localModel=null;await assert.rejects(start('photo',blockedOp));gate.resolve();assert.equal((await running).state,'Stale');});
+test('malformed parcel or experimental projection cannot use generic review fallback',async()=>{for(const p of [{kind:'parcel'},{kind:'parcel',evaluationKind:'local-experimental',acceptanceSha256:null},{kind:'inventory',evaluationManifestSha256:'f'.repeat(64)}]){put('predictions/malformed',{ownerId:'scope',version:1,reviewStatus:'Pending',...p});await assert.rejects(command('reviewPrediction',{id:'malformed',version:1,decision:'Accept',notes:'Visible face inspected'},'admin'));assert.equal(rows.get('predictions/malformed').reviewStatus,'Pending');}});
+test('unlinked parcel Reject rejects each partial experimental wire marker without any mutation',async()=>{
+  assert.equal(localModel,null);
+  for(const marker of [{evaluationOnly:true},{runtimeMode:'local-evaluation'},{operationally_approved:false},{operationally_approved:true}]){
+    const original={ownerId:'scope',kind:'parcel',recordId:'photo',label:'Normal',reviewStatus:'Pending',version:1,...marker};put('predictions/partial-marker',original);
+    const auditBefore=records('auditLogs');
+    await assert.rejects(command('reviewPrediction',{id:'partial-marker',version:1,decision:'Reject',notes:'Do not bypass experimental review'},'admin'));
+    assert.deepEqual(rows.get('predictions/partial-marker'),original);assert.deepEqual(records('auditLogs'),auditBefore);
+  }
+});
+async function orphanPhoto(select=enableLocal){
+  select();let orphan;
+  fetchWork=async()=>{orphan=new Map([...rows].map(([k,v])=>[k,structuredClone(v)]));throw new Error('Synthetic lost process');};
+  await start();rows=orphan;revisions=new Map([...rows.keys()].map(k=>[k,1]));return records('parcelAnalyses')[0];
+}
+function enableSelectorOrderLocal(){
+  enableLocal();const selected=localModel;
+  // The real selector spreads sorted manifest bindings before safeModel copies
+  // its fixed public field order. These maps are semantically identical.
+  localModel={model:selected.model,evaluationSha256:selected.evaluationSha256,...selected};
+}
+for(const reorder of [false,true]){
+  test(`photo model digest: healthy selector-order orphan cleanup is unchanged with recursive map sorting ${reorder}`,async()=>{
+    const original=await orphanPhoto(enableSelectorOrderLocal);orderedMaps=reorder;
+    const receipt=records('parcelAnalysisRequests')[0];
+    assert.notEqual(JSON.stringify(receipt.model),JSON.stringify(original.model));assert.deepEqual(sorted(receipt.model),sorted(original.model));
+    const before=structuredClone([...rows]),work=[storageReads,calls];
+    assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId}),{released:false});
+    assert.deepEqual([...rows],before);assert.deepEqual([storageReads,calls],work);
+    assert.equal(receipt.pinHash,hash(JSON.stringify(sorted(original.model))));
+    assert.equal(receipt.commandHash,hash(JSON.stringify({evidenceId:'photo',operationId:original.operationId})));
+    assert.equal(receipt.receiptKey,hash(JSON.stringify(['scope','staff',original.operationId])));
+  });
+  for(const reason of ['authority loss','expiry'])test(`photo model digest: selector-order ${reason} releases only null outcome with recursive map sorting ${reorder}`,async()=>{
+    const original=await orphanPhoto(enableSelectorOrderLocal);orderedMaps=reorder;
+    const evidence=structuredClone(rows.get('evidence/photo')),work=[storageReads,calls];
+    if(reason==='expiry')clock=original.expiresAt;else localModel=null;
+    assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId}),{released:true});
+    const saved=rows.get(`parcelAnalyses/${original.analysisId}`);assert.equal(saved.state,reason==='expiry'?'Expired':'Stale');
+    for(const key of ['label','confidence','probabilities','predictionId'])assert.equal(saved[key],null);
+    assert.equal(records('parcelAnalysisLocks').length,0);assert.equal(records('predictions').length,0);assert.deepEqual(rows.get('evidence/photo'),evidence);assert.deepEqual([storageReads,calls],work);
+    assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId}),{released:true});
+    if(reason==='authority loss'){
+      await assert.rejects(start('photo',original.operationId),e=>e.code==='unavailable');
+      await assert.rejects(command('resolveParcelAnalysis',{analysisId:original.analysisId}),e=>e.code==='unavailable');
+      await assert.rejects(command('reviewParcelAnalysis',{analysisId:original.analysisId,version:2,decision:'Accepted',notes:'Old authority remains denied'},'admin'),e=>e.code==='unavailable');
+    }
+  });
+  test(`photo model digest: normal completion survives reordered selector and recursive map sorting ${reorder}`,async()=>{
+    enableSelectorOrderLocal();orderedMaps=reorder;
+    fetchWork=async()=>{localModel=sorted(localModel);return response(result({...localModel,intendedUse:'registered-photo',operationally_approved:false,evaluationOnly:true,runtimeMode:'local-evaluation'}));};
+    const saved=await start();assert.equal(saved.state,'Predicted');assert.equal(records('predictions').length,1);assert.equal(records('parcelAnalysisLocks').length,0);
+    assert.equal(records('parcelAnalysisRequests')[0].pinHash,hash(JSON.stringify(sorted(saved.model))));
+  });
+}
+test('photo model digest: recursive map sorting preserves null Unavailable completion',async()=>{
+  delete acceptance.acceptanceSha256;orderedMaps=true;const saved=await start();
+  assert.equal(saved.state,'Unavailable');assert.equal(saved.model,null);assert.equal(saved.label,null);assert.equal(records('parcelAnalysisRequests')[0].pinHash,null);assert.equal(records('parcelAnalysisLocks').length,0);assert.equal(storageReads,0);assert.equal(calls,0);
+});
+test('photo model digest: reordered descriptors still reject changed model or pin hash without mutation',async()=>{
+  const original=await orphanPhoto(enableSelectorOrderLocal),pristine=structuredClone([...rows]),receipt=records('parcelAnalysisRequests')[0];orderedMaps=true;localModel=null;clock=original.expiresAt;
+  for(const target of ['public model','receipt model','pin hash']){
+    rows=new Map(structuredClone(pristine));revisions=new Map([...rows.keys()].map(k=>[k,1]));
+    const path=target==='public model'?`parcelAnalyses/${original.analysisId}`:`parcelAnalysisRequests/${receipt.receiptKey}`,value=rows.get(path);
+    put(path,target==='pin hash'?{...value,pinHash:'0'.repeat(64)}:{...value,model:{...value.model,modelVersion:'e'.repeat(64)}});
+    const before=structuredClone([...rows]);await assert.rejects(command('cleanupParcelAnalysis',{analysisId:original.analysisId}));assert.deepEqual([...rows],before);assert.equal(records('parcelAnalysisLocks').length,1);
+  }
+});
+test('expired orphaned experimental photo cleanup drains only its original lock after authority transition',async()=>{
+  const original=await orphanPhoto(),evidence=structuredClone(rows.get('evidence/photo'));
+  localModel={...localModel,evaluationManifestSha256:'e'.repeat(64)};clock=original.expiresAt;
+  await assert.rejects(command('resolveParcelAnalysis',{analysisId:original.analysisId}));await assert.rejects(start());
+  const before=[storageReads,calls];assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId}),{released:true});assert.deepEqual([storageReads,calls],before);
+  assert.equal(records('parcelAnalysisLocks').length,0);assert.equal(rows.get(`parcelAnalyses/${original.analysisId}`).state,'Expired');assert.equal(rows.get(`parcelAnalyses/${original.analysisId}`).label,null);assert.deepEqual(rows.get('evidence/photo'),evidence);
+  await assert.rejects(command('resolveParcelAnalysis',{analysisId:original.analysisId}),e=>e.code==='unavailable');await assert.rejects(start('photo',original.operationId),e=>e.code==='unavailable');await assert.rejects(command('reviewParcelAnalysis',{analysisId:original.analysisId,version:2,decision:'Accepted',notes:'Old authority still denied'},'admin'),e=>e.code==='unavailable');
+  fetchWork=async()=>response(result({...localModel,intendedUse:'registered-photo',operationally_approved:false,evaluationOnly:true,runtimeMode:'local-evaluation'}));assert.equal((await start()).state,'Predicted');
+});
+test('Admin can close an exact stale orphan photo without restoring old authority',async()=>{const original=await orphanPhoto();localModel=null;assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId},'admin'),{released:true});assert.equal(rows.get(`parcelAnalyses/${original.analysisId}`).state,'Stale');assert.equal(records('parcelAnalysisLocks').length,0);});
+test('reloaded four-ID Blocked photo intent recovers through its durable receipt after authority loss',async()=>{
+  enableLocal();const oldModel=structuredClone(localModel),entered=deferred(),gate=deferred(),enteredC=deferred(),gateC=deferred(),opA=randomUUID(),opB=randomUUID(),opC=randomUUID(),context={scopeId:'scope',actorUid:'staff',evidenceId:'photo',stage:'Pre-dispatch'};
+  const memory=()=>{const data=new Map();return {data,getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)};},storageA=memory(),storageB=memory(),sent=[];
+  const dispatch=async(name,input)=>{sent.push({name,input:structuredClone(input)});return command(name,input);};
+  fetchWork=async()=>{entered.resolve();await gate.promise;return response(result({...oldModel,intendedUse:'registered-photo',operationally_approved:false,evaluationOnly:true,runtimeMode:'local-evaluation'}));};
+  try{const clientA=createParcelAnalysisRetry({storage:storageA,context,command:dispatch,createOperationId:()=>opA}),work=clientA.submit().then(value=>({value}),error=>({error}));await entered.promise;
+  let clientB=createParcelAnalysisRetry({storage:storageB,context,command:dispatch,createOperationId:()=>opB});assert.equal((await clientB.submit()).state,'Busy');
+  assert.deepEqual(JSON.parse([...storageB.data.values()][0]),{scopeId:'scope',actorUid:'staff',evidenceId:'photo',operationId:opB});
+  clientB=createParcelAnalysisRetry({storage:storageB,context,command:dispatch,createOperationId:()=>opC});const original=records('parcelAnalyses')[0];localModel={...localModel,evaluationManifestSha256:'e'.repeat(64)};clock=original.expiresAt;
+  await assert.rejects(clientB.check());assert.equal(clientB.pending().operationId,opB);const startsBefore=sent.filter(s=>s.name==='startParcelAnalysis').length;
+  assert.deepEqual(await clientB.cleanup(original),{released:true,recoveryComplete:true});assert.equal(clientB.pending(),null);assert.equal(records('parcelAnalysisLocks').length,0);assert.equal(sent.filter(s=>s.name==='startParcelAnalysis').length,startsBefore);assert.deepEqual(sent.at(-1),{name:'cleanupParcelAnalysis',input:{analysisId:original.analysisId,pendingOperationId:opB}});
+  await assert.rejects(start('photo',opB),e=>e.code==='unavailable');await assert.rejects(command('resolveParcelAnalysis',{analysisId:original.analysisId}),e=>e.code==='unavailable');await assert.rejects(command('reviewParcelAnalysis',{analysisId:original.analysisId,version:2,decision:'Accepted',notes:'Old authority remains denied'},'admin'),e=>e.code==='unavailable');
+  gate.resolve();assert((await work).error);fetchWork=async()=>{enteredC.resolve();await gateC.promise;return response(result({...localModel,intendedUse:'registered-photo',operationally_approved:false,evaluationOnly:true,runtimeMode:'local-evaluation'}));};const next=clientB.submit();await enteredC.promise;const successor=records('parcelAnalysisLocks')[0];await assert.rejects(command('cleanupParcelAnalysis',{analysisId:original.analysisId,pendingOperationId:opC}));assert.equal(clientB.pending().operationId,opC);assert.deepEqual(records('parcelAnalysisLocks')[0],successor);gateC.resolve();assert.equal((await next).state,'Predicted');}finally{gate.resolve();gateC.resolve();}
+});
+test('pending photo operation association rejects unknown/unrelated or malformed Blocked receipts before release',async()=>{
+  const original=await orphanPhoto(),opB=randomUUID();assert.equal((await start('photo',opB)).state,'Busy');const key=hash(JSON.stringify(['scope','staff',opB])),path=`parcelAnalysisRequests/${key}`,blocked=structuredClone(rows.get(path));localModel=null;
+  for(const operationId of [randomUUID(),original.operationId]){const caller=operationId===original.operationId?'admin':'staff';await assert.rejects(command('cleanupParcelAnalysis',{analysisId:original.analysisId,pendingOperationId:operationId},caller));assert.equal(rows.get(`parcelAnalyses/${original.analysisId}`).state,'Running');}
+  for(const patch of [{ownerId:'other'},{actorUid:'other'},{evidenceId:'other'},{operationId:randomUUID()},{analysisId:'other'},{commandHash:'b'.repeat(64)},{state:'Running'},{extra:true}]){put(path,{...blocked,...patch});await assert.rejects(command('cleanupParcelAnalysis',{analysisId:original.analysisId,pendingOperationId:opB}));assert.equal(rows.get(`parcelAnalyses/${original.analysisId}`).state,'Running');assert.equal(records('parcelAnalysisLocks').length,1);}put(path,blocked);
+  assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId,pendingOperationId:opB}),{released:true});assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId,pendingOperationId:opB}),{released:true});
+});
+test('matching original pending operation can use receipt-only cleanup without a Blocked receipt',async()=>{const original=await orphanPhoto();localModel=null;assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId,pendingOperationId:original.operationId}),{released:true});assert.equal(records('parcelAnalysisLocks').length,0);});
+test('photo null cleanup retains actor, scope, receipt/model/context and nonce fences with strict acknowledgement',async()=>{
+  const original=await orphanPhoto();assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId}),{released:false});
+  localModel=null;put('users/other',{uid:'other',role:'Warehouse',status:'Approved',active:true,version:1});await assert.rejects(command('cleanupParcelAnalysis',{analysisId:original.analysisId},'other'));
+  await assert.rejects(executeCommand({uid:'staff'},{action:'cleanupParcelAnalysis',input:{analysisId:original.analysisId},workspaceId:'wrong-scope'}));
+  await assert.rejects(command('cleanupParcelAnalysis',{analysisId:original.analysisId,evaluationKind:'local-experimental'}));
+  const lock=records('parcelAnalysisLocks')[0],path=`parcelAnalysisLocks/${hash(JSON.stringify(['scope','photo']))}`;put(path,{...lock,nonce:randomUUID()});await assert.rejects(command('cleanupParcelAnalysis',{analysisId:original.analysisId},'admin'));assert.equal(rows.get(`parcelAnalyses/${original.analysisId}`).state,'Running');put(path,lock);
+  const receipt=records('parcelAnalysisRequests').find(r=>r.analysisId===original.analysisId),receiptPath=`parcelAnalysisRequests/${receipt.receiptKey}`;put(receiptPath,{...receipt,model:{...receipt.model,evaluationManifestSha256:'b'.repeat(64)}});await assert.rejects(command('cleanupParcelAnalysis',{analysisId:original.analysisId},'admin'));put(receiptPath,receipt);
+  put(receiptPath,{...receipt,snapshot:{...receipt.snapshot,evidence:{...receipt.snapshot.evidence,shipmentId:'other'}}});await assert.rejects(command('cleanupParcelAnalysis',{analysisId:original.analysisId},'admin'));put(receiptPath,receipt);
+  put('users/manager',{uid:'manager',role:'Manager',status:'Approved',active:true,version:1});assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId},'manager'),{released:true});assert.equal(rows.get(`parcelAnalyses/${original.analysisId}`).state,'Stale');assert.deepEqual(await command('cleanupParcelAnalysis',{analysisId:original.analysisId},'admin'),{released:true});
 });
 
 test('no pin saves truthful Unavailable without Storage/HTTP, exact replay survives stage/role change',async()=>{

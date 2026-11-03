@@ -1,8 +1,9 @@
+import {sessionRecoveryStorage} from '../../../lib/firebaseRuntime';
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {collection,doc,endAt,endBefore,limit,limitToLast,onSnapshot,orderBy,query,startAfter,startAt,where} from 'firebase/firestore';
 import type {DocumentData,QueryConstraint,QueryDocumentSnapshot} from 'firebase/firestore';
-import {getApp} from 'firebase/app';
-import {connectStorageEmulator,getBlob,getMetadata,getStorage,ref} from 'firebase/storage';
+import {getBlob,getMetadata,ref} from 'firebase/storage';
+import {storage as configuredStorage} from '../../../lib/firebaseRuntime';
 import {auth,db} from '../../../lib/firebase';
 import {getActiveWorkspace,workspaceCommand} from '../../../lib/workspace';
 import {canReadParcelLive,canStartParcelLive,parcelLiveFrameKey,parcelLiveReasonMessage,toPublicParcelLiveFrame,toPublicParcelLiveSession} from '../../../lib/parcelLive';
@@ -26,10 +27,8 @@ export interface ParcelLiveCameraProps {
   acquisitionDisabled?:boolean;
 }
 const idle:ParcelLiveSnapshot={state:'Idle',sessionId:null,attempted:0,completed:0,dropped:0,lastResult:null,reason:null,current:false,resultAgeMs:null};
-let storage:ReturnType<typeof getStorage>|undefined;
 function retainedStorage(){
-  if(!storage){storage=getStorage(getApp());if(['localhost','127.0.0.1'].includes(location.hostname))connectStorageEmulator(storage,'127.0.0.1',9199);}
-  return storage;
+  if(!configuredStorage)throw Error('The configured evidence service is unavailable.');return configuredStorage;
 }
 function localReason(reason:ParcelLiveReason|null){
   if(reason==='unavailable')return 'Live analysis is unavailable. Review recorded evidence manually.';
@@ -83,7 +82,7 @@ function LiveContext({member,shipment,stage,active,onOpen,onClose,acquisitionDis
   useLayoutEffect(()=>{
     mounted.current=true;
     try{
-      const adapter=createParcelLiveClient({storage:window.sessionStorage,context:{scopeId:member.workspaceId,actorUid:member.uid,shipmentId:shipment.id,stage},command:workspaceCommand as ParcelLiveCommand,onChange:()=>{if(mounted.current)refresh();}});
+      const adapter=createParcelLiveClient({storage:sessionRecoveryStorage,context:{scopeId:member.workspaceId,actorUid:member.uid,shipmentId:shipment.id,stage},command:workspaceCommand as ParcelLiveCommand,onChange:()=>{if(mounted.current)refresh();}});
       client.current=adapter;refresh();
     }catch{queueMicrotask(()=>{if(mounted.current)setStorageFailure(true);});}
     return()=>{
@@ -212,6 +211,13 @@ function LiveContext({member,shipment,stage,active,onOpen,onClose,acquisitionDis
     catch{if(stillCurrent())setError('The saved live session could not be confirmed. Its original IDs remain available for another explicit check.');}
     finally{operation.current=false;if(mounted.current){setBusy(false);refresh();}}
   }
+  async function closeInterrupted(record:ParcelLiveSessionPublic){
+    if(!client.current||operation.current||!stillCurrent()||['Starting','Running'].includes(live.state)&&live.sessionId===record.sessionId)return;
+    operation.current=true;setBusy(true);setError('');setNotice('');releaseMedia();onClose();
+    try{const ack=await client.current.cleanup(record);if(!stillCurrent())return;if(!ack.released)throw new Error();setNotice('Interrupted request closed. Starting another live session requires an explicit request.');}
+    catch{if(stillCurrent())setError('This interrupted session could not be closed. Its saved identity remains available for another explicit check.');}
+    finally{operation.current=false;if(mounted.current){setBusy(false);refresh();}}
+  }
   function pageSessions(direction:'older'|'newer'|'latest'){
     if(loading||!stillCurrent())return;
     const cursor=direction==='older'?sessionBounds.last:sessionBounds.first;
@@ -248,8 +254,10 @@ function LiveContext({member,shipment,stage,active,onOpen,onClose,acquisitionDis
     <h5>Recorded live sessions</h5>{loading&&<p role="status">Loading saved live sessions…</p>}{historyError&&<p role="alert" className="error">{historyError}</p>}{historyNotice&&<p role="status">{historyNotice}</p>}
     <nav className="evidence-actions" aria-label="Live session history pages"><button type="button" disabled={loading||!sessionBounds.mayHaveOlder} onClick={()=>pageSessions('older')}>Older sessions</button><button type="button" disabled={loading||!sessionBounds.mayHaveNewer} onClick={()=>pageSessions('newer')}>Newer sessions</button><button type="button" disabled={loading||sessionPage.direction==='latest'&&!historyError} onClick={()=>pageSessions('latest')}>Latest sessions</button></nav>
     {sessions.map(record=><article className="parcel-live-record" key={record.sessionId}>
+      {record.model?.evaluationKind==='local-experimental'&&<p className="parcel-review-required">Local experimental session · No operational acceptance.</p>}
       <h5>{record.state}</h5>{record.reasonCode&&<p>{parcelLiveReasonMessage(record.reasonCode)}</p>}<dl className="parcel-evidence-details"><div><dt>Session</dt><dd>{record.sessionId}</dd></div><div><dt>Shipment / recorded stage</dt><dd>{record.shipmentId} / {record.stage}</dd></div><div><dt>Recorded</dt><dd>{recorded(record.createdAt)}</dd></div><div><dt>Reserved / completed</dt><dd>{record.reservedCount} / {record.completedCount}</dd></div></dl>
       <button type="button" onClick={()=>{if(selected===record.sessionId)return;setFrames([]);setSelected(record.sessionId);}}>View saved session</button>
+      {(record.actorUid===member.uid||canReview)&&(record.state==='Open'||pending&&['Expired','Stale'].includes(record.state))&&<button type="button" disabled={busy||['Starting','Running'].includes(live.state)&&live.sessionId===record.sessionId} onClick={()=>void closeInterrupted(record)}>Close interrupted request</button>}
     </article>)}
     {[...frameMap.values()].filter(record=>record.sessionId===selected||record.frameId===saved?.frame?.frameId).map(record=><LiveFrame key={`${record.sessionId}:${record.frameId}:${record.version}`} record={record} current={live.current&&live.lastResult?.sessionId===record.sessionId&&live.lastResult?.frameId===record.frameId} canReview={canReview} stillCurrent={stillCurrent} reviewFrame={(frame,input)=>{const adapter=client.current;if(!adapter)return Promise.reject(new Error());return adapter.review(frame,input);}} onReviewed={()=>refresh()}/>)}
   </section>;
@@ -287,10 +295,11 @@ function LiveFrame({record,current,canReview,stillCurrent,reviewFrame,onReviewed
   }
   return <article className="parcel-analysis-outcome parcel-live-frame" aria-label="Recorded live frame">
     <h5>{value.state}{value.label!==null?`: ${value.label}`:''}</h5><b className="parcel-live-freshness">{current?'Current':'Historical'}</b><p>{current?'A fresh result from this foreground session.':'Recorded frame only; freshness is not reconstructed after reload or stop.'}</p>
+    {value.model.evaluationKind==='local-experimental'&&<p className="parcel-review-required">Local experimental observation · No operational acceptance. Human review cannot approve this model or trigger operational decisions.</p>}
     {value.reasonCode&&<p>{parcelLiveReasonMessage(value.reasonCode)}</p>}
     <dl className="parcel-evidence-details"><div><dt>Session / frame</dt><dd>{value.sessionId} / {value.frameId}</dd></div><div><dt>Shipment / stage / sequence</dt><dd>{value.shipmentId} / {value.stage} / {value.sequence}</dd></div><div><dt>Completed</dt><dd>{recorded(value.completedAt)}</dd></div><div><dt>Retention</dt><dd>{value.retention}</dd></div><div><dt>Client capture declaration</dt><dd>{recorded(Date.parse(value.capturedAtClient))} (unverified device clock)</dd></div></dl>
     {value.retention==='Verified'?<><button type="button" disabled={busy} onClick={()=>void view()}>View retained frame</button>{url&&<div className="parcel-live-image"><img src={url} alt="Retained sampled parcel frame"/><button type="button" onClick={()=>{if(objectUrl.current)URL.revokeObjectURL(objectUrl.current);objectUrl.current='';setUrl('');}}>Close retained frame</button></div>}</>:<p>{value.retention==='Unknown'?'A sample may have been retained, but its exact object identity could not be confirmed.':'No verified retained image identity is available.'} This cannot support human acceptance.</p>}
-    <details><summary>Model and frame provenance</summary><p>{value.model.model} · {value.model.preprocessing} · Contrast: {value.model.contrast}</p><dl className="parcel-evidence-details"><div><dt>Image SHA-256</dt><dd>{value.sha256}</dd></div><div><dt>Model version</dt><dd>{value.model.modelVersion}</dd></div><div><dt>Selection SHA-256</dt><dd>{value.model.selectionSha256}</dd></div><div><dt>Evaluation SHA-256</dt><dd>{value.model.evaluationSha256}</dd></div><div><dt>Acceptance SHA-256</dt><dd>{value.model.acceptanceSha256}</dd></div></dl>{value.probabilities&&<p>Normal score {(value.probabilities[0]*100).toFixed(1)}%; Damaged score {(value.probabilities[1]*100).toFixed(1)}%. Confidence is uncalibrated, not a measured probability of correctness.</p>}</details>
+    <details><summary>Model and frame provenance</summary><p>{value.model.model} · {value.model.preprocessing} · Contrast: {value.model.contrast}</p><dl className="parcel-evidence-details"><div><dt>Image SHA-256</dt><dd>{value.sha256}</dd></div><div><dt>Model version</dt><dd>{value.model.modelVersion}</dd></div><div><dt>Selection SHA-256</dt><dd>{value.model.selectionSha256}</dd></div><div><dt>Evaluation SHA-256</dt><dd>{value.model.evaluationSha256}</dd></div><div><dt>Acceptance SHA-256</dt><dd>{value.model.acceptanceSha256??'No operational acceptance'}</dd></div>{value.model.evaluationKind==='local-experimental'&&<div><dt>Local evaluation manifest SHA-256</dt><dd>{value.model.evaluationManifestSha256}</dd></div>}</dl>{value.probabilities&&<p>Normal score {(value.probabilities[0]*100).toFixed(1)}%; Damaged score {(value.probabilities[1]*100).toFixed(1)}%. Confidence is uncalibrated, not a measured probability of correctness.</p>}</details>
     {value.humanReviewRequired&&<p className="parcel-review-required">Human review required</p>}<p>Review: {value.reviewStatus}</p>{value.reviewNotes&&<p>{value.reviewNotes}</p>}
     {canReview&&value.retention==='Verified'&&value.reviewStatus==='Pending'&&<form className="parcel-analysis-review" onSubmit={event=>{event.preventDefault();void review();}}><label>Review decision<select aria-label="Live frame review decision" value={decision} onChange={event=>setDecision(event.target.value as ParcelLiveReviewDecision)}>{value.state==='Abstained'?<option value="Reviewed">Reviewed</option>:<><option value="Accepted">Accepted</option><option value="Rejected">Rejected</option></>}</select></label><label>Review notes<textarea aria-label="Live frame review notes" minLength={3} maxLength={240} required value={notes} onChange={event=>setNotes(event.target.value)}/></label><button type="submit" disabled={busy||notes.trim().length<3}>Record live frame review</button></form>}
     {error&&<p role="alert" className="error">{error}</p>}

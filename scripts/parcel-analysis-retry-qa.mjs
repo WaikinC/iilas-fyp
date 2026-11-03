@@ -9,6 +9,23 @@ const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve
 // Complete fixed public shape, hand-written independently of the state helpers.
 const result=(state='Running')=>({analysisId:'analysis',ownerId:'scope',actorUid:'actor',operationId:op,shipmentId:'shipment',evidenceId:'evidence',evidenceVersion:2,evidenceSha256:'a'.repeat(64),stage:'Pre-dispatch',shipmentVersion:3,captureSource:'file',capturedAtClient:null,model:null,state,version:state==='Running'?1:2,createdAt:1000,updatedAt:state==='Running'?1000:state==='Expired'?91000:2000,expiresAt:91000,completedAt:state==='Running'?null:state==='Expired'?91000:2000,label:null,probabilities:null,confidence:null,confidenceMeaning:null,serviceRequestId:null,processingTimeMs:null,totalProcessingTimeMs:null,predictionId:null,reasonCode:state==='Unavailable'?'model-unavailable':state==='Expired'?'lease-expired':null,reviewStatus:'NotRequired',reviewNotes:null,reviewedBy:null,reviewedAt:null,humanReviewRequired:false});
 
+test('explicit photo cleanup clears only a matching saved intent on exact true acknowledgement without new inference',async()=>{
+  const storage=memory(),calls=[];let client=createParcelAnalysisRetry({storage,context,createOperationId:()=>op,command:async(name,input)=>{calls.push([name,input]);if(name==='cleanupParcelAnalysis')return {released:true};return result();}});
+  await client.submit();client=createParcelAnalysisRetry({storage,context,command:async(name,input)=>{calls.push([name,input]);return {released:true};}});
+  assert.deepEqual(await client.cleanup(result()),{released:true,recoveryComplete:true});assert.equal(client.pending(),null);assert.deepEqual(calls,[['startParcelAnalysis',{evidenceId:'evidence',operationId:op}],['cleanupParcelAnalysis',{analysisId:'analysis',pendingOperationId:op}]]);
+});
+test('photo cleanup false/malformed acknowledgement, wrong context and late generation cannot clear recovery identity',async()=>{
+  for(const ack of [{released:false},{released:1},{released:true,model:null},null]){
+    const storage=memory(),calls=[],client=createParcelAnalysisRetry({storage,context,createOperationId:()=>op,command:async(name,input)=>{calls.push([name,input]);return name==='cleanupParcelAnalysis'?ack:result();}});await client.submit();
+    if(ack?.released===false)assert.deepEqual(await client.cleanup(result()),{released:false,recoveryComplete:false});else await assert.rejects(client.cleanup(result()));
+    assert.equal(client.pending().operationId,op);const before=calls.length;await assert.rejects(client.cleanup({...result(),ownerId:'other'}));assert.equal(calls.length,before);
+  }
+  const storage=memory(),gate=deferred(),client=createParcelAnalysisRetry({storage,context,createOperationId:()=>op,command:async name=>name==='cleanupParcelAnalysis'?gate.promise:result()});await client.submit();const work=client.cleanup(result());client.setContext({...context,stage:'Delivery'});client.setContext(context);gate.resolve({released:true});await assert.rejects(work);assert.equal(client.pending().operationId,op);
+});
+test('late photo server release preserves unrelated successor intent and reports incomplete client recovery',async()=>{
+  const storage=memory(),gate=deferred(),client=createParcelAnalysisRetry({storage,context,createOperationId:()=>op,command:async name=>name==='cleanupParcelAnalysis'?gate.promise:result()});await client.submit();const work=client.cleanup(result()),key=[...storage.values.keys()][0],successor={scopeId:'scope',actorUid:'actor',evidenceId:'evidence',operationId:'87654321-4321-4321-8321-cba987654321'};storage.setItem(key,JSON.stringify(successor));gate.resolve({released:true});assert.deepEqual(await work,{released:true,recoveryComplete:false});assert.deepEqual(client.pending(),successor);
+});
+
 test('response loss and reload preserve only identity and replay the exact same operation',async()=>{
   const storage=memory();let calls=[];
   let client=createParcelAnalysisRetry({storage,context,createOperationId:()=>op,command:async(name,input)=>{calls.push({name,input});throw new Error('lost response');}});

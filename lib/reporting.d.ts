@@ -1,0 +1,10 @@
+export type ReportFilters=Record<string,string>;
+export type ReportColumn={key:string;label:string;path:string|string[];format?:'time'};
+export type ReportResource={label:string;group:string;roles:readonly string[];columns:ReportColumn[];dateField:string;dateKind:'timestamp'|'day';dateLabel:string;filters:Record<string,{path:string|string[];kind:string;indexed?:boolean}>;searchPaths:string[];identifierPaths:string[];driver?:string};
+export type ReportCoverage={scope:'page'|'filtered';complete:boolean;scanned:number;scanCap:number;readCount:number;readCap:number;undatedExcluded:boolean;dateBasis:string;unknownValues:boolean;assignedOnly:boolean};
+export type ReportPage={rows:Record<string,string|number|boolean|null>[];cursor:string|null;hasMore:boolean;scanned:number;coverage:ReportCoverage;observedAtMs:number};
+export const REPORT_RESOURCES:Readonly<Record<string,ReportResource>>;
+export function validateReportRequest(value:unknown):{resource:string;filters:ReportFilters;cursor?:string};
+export function reportDateWindow(filters:ReportFilters):{fromMs:number;toMs:number;days:number}|null;
+export function csvCell(value:unknown):string;
+export function buildReportCSV(input:{resource:string;filters:ReportFilters;rows:Record<string,unknown>[];coverage:Partial<ReportCoverage>;observedAtMs:number}):string;

@@ -1,0 +1,2 @@
+import type {ReviewInput,ReviewOutcome} from './inventoryDemoReorder';
+export function createInventoryDemoReorderClient(options:{storage:Pick<Storage,'getItem'|'setItem'|'removeItem'>;context:{uid:string;scope:string};command:(action:string,input:ReviewInput)=>Promise<unknown>;isCurrent:()=>boolean}):{activate:()=>void;dispose:()=>void;pending:()=>ReviewInput|null;start:(input:Omit<ReviewInput,'operationId'>)=>Promise<ReviewOutcome>;retry:()=>Promise<ReviewOutcome>;resolve:()=>Promise<ReviewOutcome>};

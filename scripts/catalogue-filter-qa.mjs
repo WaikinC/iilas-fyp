@@ -1,0 +1,4 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {matchesCatalogue} from '../lib/catalogueFilters.js';
+test('catalogue status/identifier/category/search preserve source IDs and balances',()=>{const row={id:'original',name:'Demo Carton',sku:'BOX-1',barcode:'123',location:'A1',category:'Packaging',status:'Active',quantityOnHand:10,reservedQuantity:4,reorderLevel:5},before=structuredClone(row),f={status:'All statuses',identifier:'',category:'All Categories',search:'',lowStock:false};assert(matchesCatalogue(row,f));assert(matchesCatalogue(row,{...f,identifier:' box-1 '}));assert(matchesCatalogue(row,{...f,identifier:'ORIGINAL'}));assert(!matchesCatalogue(row,{...f,identifier:'BOX'}));assert(!matchesCatalogue(row,{...f,status:'Inactive'}));assert(!matchesCatalogue(row,{...f,lowStock:true}));assert(!matchesCatalogue(row,{...f,category:'Tools'}));assert(matchesCatalogue(row,{...f,search:'demo'}));assert.deepEqual(row,before);});

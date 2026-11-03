@@ -1,0 +1,12 @@
+import {defineConfig} from 'vite';
+import react from '@vitejs/plugin-react';
+import {fileURLToPath} from 'node:url';
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const flavour=process.env.IILAS_MOBILE_FLAVOUR||'local';
+if(!['local','cloud-demo','spark-msi'].includes(flavour))throw Error('Explicit mobile debug flavour required.');
+const bytes=process.env.IILAS_MOBILE_WEB_CONFIG?readFileSync(process.env.IILAS_MOBILE_WEB_CONFIG):null;
+if(bytes&&createHash('sha256').update(bytes).digest('hex')!==process.env.IILAS_MOBILE_WEB_CONFIG_SHA256)throw Error('Mobile web configuration changed.');
+if(flavour!=='local'&&!bytes)throw Error('Cloud mobile options are required.');
+const options=bytes?JSON.parse(bytes.toString('utf8')):{projectId:'fyp-inventory-and-logistics',apiKey:'emulator-test-only',appId:'1:1234567890:web:0000000000000000',authDomain:'localhost'};
+export default defineConfig({plugins:[react()],define:{__IILAS_MOBILE_MODE__:JSON.stringify(flavour),__IILAS_MOBILE_OPTIONS__:JSON.stringify(options),__IILAS_MOBILE_FIXTURE_ONLY__:JSON.stringify(process.env.IILAS_MOBILE_FIXTURE_ONLY==='true')},resolve:{alias:{'@':fileURLToPath(new URL('.',import.meta.url))}},build:{outDir:'dist/mobile',emptyOutDir:true,rollupOptions:{input:fileURLToPath(new URL('mobile.html',import.meta.url))}}});

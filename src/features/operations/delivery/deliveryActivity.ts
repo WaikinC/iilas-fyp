@@ -1,0 +1,8 @@
+export type EvidenceActivity={contextKey:string;shipmentId:string;stage:'Pre-dispatch'|'Delivery';mode:'idle'|'manual-camera'|'selection'|'upload'|'live';busy:boolean;hasSelection:boolean;hasPending:boolean};
+export function blocksDeliveryNavigation(activity:EvidenceActivity|null):boolean{if(activity===null)return false;return !activity||typeof activity.busy!=='boolean'||activity.busy||!['idle','selection'].includes(activity.mode);}
+export function canChangeEvidenceSource(activity:EvidenceActivity|null):boolean{return activity===null||!blocksDeliveryNavigation(activity)&&activity.hasSelection===false&&activity.hasPending===false;}
+export type DeliveryContextIdentity={workspaceKey:string;shipmentId:string;shipmentVersion:number;deliveryVersion:number;driverUid:string;visible:boolean;generation?:number};
+export function deliveryContextCurrent(captured:DeliveryContextIdentity,current:DeliveryContextIdentity|null):boolean{return !!current&&current.visible&&captured.visible&&(['workspaceKey','shipmentId','shipmentVersion','deliveryVersion','driverUid'] as const).every(k=>captured[k]===current[k]);}
+
+/** Publish only the original selection's response, allowing its own next revision. */
+export function deliveryOutcomeCurrent(captured:DeliveryContextIdentity,current:DeliveryContextIdentity|null,expectedVersion:number):boolean{return !!current&&captured.visible&&current.visible&&(['workspaceKey','shipmentId','shipmentVersion','driverUid','generation'] as const).every(k=>captured[k]===current[k])&&(current.deliveryVersion===captured.deliveryVersion||current.deliveryVersion===expectedVersion);}

@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {createHash, randomUUID} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
 import {mock, test} from 'node:test';
 
 const require = createRequire(new URL('../backend/functions/service.mjs', import.meta.url));
@@ -146,3 +147,48 @@ test('delivery reassignment during delayed tabular inference prevents final writ
   await assert.rejects(prediction, {code: 'permission-denied'});
   assert.deepEqual(state.predictions(), []);
 });
+
+async function withResearchEnvironment(local,work) {
+  const keys=['RESEARCH_API_URL','RESEARCH_API_TOKEN','IILAS_PARCEL_LOCAL_EVAL_MANIFEST','IILAS_PARCEL_LOCAL_EVAL_MANIFEST_SHA256'];
+  const saved=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+  try {
+    for(const key of keys)delete process.env[key];
+    const researchToken=randomUUID();
+    Object.assign(process.env,{RESEARCH_API_URL:'http://127.0.0.1:1',RESEARCH_API_TOKEN:researchToken},local);
+    return await work(researchToken);
+  } finally {
+    for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}
+  }
+}
+const localParcelConfigurations=[
+  ['both keys with absent target',{IILAS_PARCEL_LOCAL_EVAL_MANIFEST:fileURLToPath(new URL('../outputs/parcel-local-eval-20261022/never-created-generic-test/manifest.json',import.meta.url)),IILAS_PARCEL_LOCAL_EVAL_MANIFEST_SHA256:'a'.repeat(64)}],
+  ['path only',{IILAS_PARCEL_LOCAL_EVAL_MANIFEST:'absent-manifest.json'}],
+  ['hash only',{IILAS_PARCEL_LOCAL_EVAL_MANIFEST_SHA256:'a'.repeat(64)}],
+  ['malformed pair',{IILAS_PARCEL_LOCAL_EVAL_MANIFEST:'not-an-absolute-manifest',IILAS_PARCEL_LOCAL_EVAL_MANIFEST_SHA256:'invalid'}],
+  ['empty path',{IILAS_PARCEL_LOCAL_EVAL_MANIFEST:''}],
+  ['empty hash',{IILAS_PARCEL_LOCAL_EVAL_MANIFEST_SHA256:''}],
+  ['both empty',{IILAS_PARCEL_LOCAL_EVAL_MANIFEST:'',IILAS_PARCEL_LOCAL_EVAL_MANIFEST_SHA256:''}],
+];
+for(const kind of ['inventory','delivery']){
+  for(const [name,local] of localParcelConfigurations){
+    test(`parcel-only isolation: ${kind} never fetches with ${name}`,async t=>withResearchEnvironment(local,async()=>{
+      const state=fixture();if(kind==='inventory')state.change('users/driver',{role:'Inventory'});
+      const before=JSON.stringify([...state.records]);let calls=0;
+      t.mock.method(globalThis,'fetch',async()=>{calls++;throw new Error('Generic inference reached the parcel-only endpoint.');});
+      await assert.rejects(command(kind,productionCommand),error=>error.code==='unavailable'&&/labelled datasets/.test(error.message));
+      assert.equal(calls,0);assert.equal(JSON.stringify([...state.records]),before);
+    }));
+  }
+  test(`parcel-only isolation: ${kind} retains configured general research without local keys`,async t=>withResearchEnvironment({},async researchToken=>{
+    const state=fixture();if(kind==='inventory')state.change('users/driver',{role:'Inventory'});
+    const calls=[],tabular={label:kind==='inventory'?'Reorder Risk':'High',confidence:0.75,model:'RandomForest',modelVersion:'general-research-v1',globalFeatureImportance:{example:0.3}};
+    t.mock.method(globalThis,'fetch',async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>tabular};});
+    await command(kind,productionCommand);
+    assert.equal(calls.length,1);assert.equal(calls[0].url,'http://127.0.0.1:1/predict');
+    assert.equal(calls[0].options.headers.Authorization,`Bearer ${researchToken}`);
+    const payload=JSON.parse(calls[0].options.body),saved=state.predictions()[0];
+    assert.equal(payload.kind,kind);assert.deepEqual(payload.features,saved.features);
+    assert.equal(saved.label,tabular.label);assert.equal(saved.modelVersion,tabular.modelVersion);
+    assert.deepEqual(saved.globalFeatureImportance,tabular.globalFeatureImportance);assert.equal(state.audits().length,1);
+  }));
+}

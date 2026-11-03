@@ -5,6 +5,8 @@ import {approvedTransaction,ROLES} from './access.mjs';
 import {runParcelLiveOperation,guardParcelLiveOperation,guardParcelLiveTransaction,parcelLiveOperationDeadline,tightenParcelLiveOperationDeadline,onParcelLiveCancel} from './parcelLiveDeadline.mjs';
 import {parcelLiveAcceptance,requireParcelLiveAcceptance} from './parcelLiveAcceptance.mjs';
 import {validateParcelLiveResponse} from './parcelLiveResponse.mjs';
+import {selectParcelLocalEvaluationModel,assertParcelLocalEvaluationAuthority,isParcelLocalEvaluationModel} from './parcelLocalEvaluation.mjs';
+import {validateParcelLocalEvaluationLiveResponse} from './parcelLocalEvaluationResponse.mjs';
 import {PARCEL_LIVE_POLICY as POLICY,canonicalParcelLiveValue,parcelLiveStartReceiptKey,parcelLiveActorLockKey,parcelLiveFrameKey,parcelLiveIngestDigest,validateStartParcelLiveSession,validateReserveParcelLiveFrame,validateAnalyseParcelLiveFrame,validateResolveParcelLiveSession,validateResolveParcelLiveFrame,validateStopParcelLiveSession,validateReviewParcelLiveFrame,canStartParcelLive,canReserveParcelLiveFrame,canCompleteParcelLiveFrame,parcelLiveSessionExpiresAt,parcelLiveFrameExpiresAt,matchesParcelLiveActorLock,matchesParcelLiveFrameClaim,toPublicParcelLiveSession,toPublicParcelLiveFrame,reviewParcelLiveFrameRecord} from './parcelLive.js';
 
 const db=()=>getFirestore(),ref=(kind,id)=>db().collection(kind).doc(id);
@@ -14,7 +16,8 @@ const fail=(code='failed-precondition')=>{const e=new Error(code==='permission-d
 const problem=reasonCode=>Object.assign(new Error('Live parcel resource failed.'),{reasonCode});
 const safe=fn=>(...args)=>runParcelLiveOperation(async()=>{try{return await fn(...args);}catch(e){if(e.liveSafe)throw e;if(e.code==='permission-denied')fail('permission-denied');if(e.code==='unavailable')fail('unavailable');fail();}});
 const scoped=(snapshot,scope)=>{const r=snapshot.data();if(!r||r.ownerId!==scope)fail('not-found');return r;};
-const selectedModel=()=>{try{return requireParcelLiveAcceptance(parcelLiveAcceptance);}catch{return null;}};
+const selectedModel=()=>{try{return requireParcelLiveAcceptance(parcelLiveAcceptance);}catch{return selectParcelLocalEvaluationModel('sampled-live');}};
+function localAuthority(model){try{assertParcelLocalEvaluationAuthority(model);}catch{fail('unavailable');}}
 const serviceReady=()=>Boolean(process.env.RESEARCH_API_URL&&process.env.RESEARCH_API_TOKEN);
 const actorKey=(scope,actor)=>parcelLiveActorLockKey(scope,actor);
 const frameKey=(scope,sessionId,frameId)=>parcelLiveFrameKey(scope,sessionId,frameId);
@@ -25,8 +28,9 @@ const eligible=(scope,actor,account,stage,{shipment,plan})=>(!plan||plan.ownerId
 const blank={label:null,probabilities:null,confidence:null,confidenceMeaning:null,serviceRequestId:null,processingTimeMs:null,totalProcessingTimeMs:null,humanReviewRequired:false,reviewStatus:'NotApplicable',reviewNotes:null,reviewedBy:null,reviewedAt:null};
 const busy=sessionId=>({state:'Busy',sessionId,reasonCode:'session-busy'});
 
-async function load(tx,scope,sessionId,newSessionWork){
+async function load(tx,scope,sessionId,newSessionWork,internalCleanup=false){
   const session=scoped(await tx.get(ref('parcelLiveSessions',sessionId)),scope);
+  if(!internalCleanup)localAuthority(session.model);
   if(session.sessionId!==sessionId)fail();toPublicParcelLiveSession(session);
   if(newSessionWork)newSessionWork(session);
   const key=await parcelLiveStartReceiptKey(scope,session.actorUid,session.operationId),receipt=(await tx.get(ref('parcelLiveStartRequests',key))).data();
@@ -66,10 +70,10 @@ export const startParcelLiveSession=safe(async(auth,scope,input)=>{
   const data=validateStartParcelLiveSession(input),key=await parcelLiveStartReceiptKey(scope,auth.uid,data.operationId),lk=await actorKey(scope,auth.uid);
   return scopedTx(auth,scope,ROLES,async(tx,config,account)=>{
     const old=(await tx.get(ref('parcelLiveStartRequests',key))).data();
-    if(old){if(old.ownerId!==scope||old.actorUid!==auth.uid||old.commandHash!==digest(data)||!same(old.input,data))fail();if(old.state==='Blocked')return busy(old.sessionId);return toPublicParcelLiveSession((await load(tx,scope,old.sessionId)).session);}
+    if(old){if(old.ownerId!==scope||old.actorUid!==auth.uid||old.commandHash!==digest(data)||!same(old.input,data))fail();if(old.state==='Blocked'){const blocking=scoped(await tx.get(ref('parcelLiveSessions',old.sessionId)),scope);localAuthority(blocking.model);return busy(old.sessionId);}return toPublicParcelLiveSession((await load(tx,scope,old.sessionId)).session);}
     const current=await context(tx,scope,data.shipmentId);if(!eligible(scope,auth.uid,account,data.stage,current))fail('permission-denied');
     const lock=(await tx.get(ref('parcelLiveActorLocks',lk))).data();
-    if(lock){const blocking=scoped(await tx.get(ref('parcelLiveSessions',lock.sessionId)),scope);if(blocking.actorUid!==auth.uid||lock.actorUid!==auth.uid||lock.ownerId!==scope)fail();tx.create(ref('parcelLiveStartRequests',key),{ownerId:scope,actorUid:auth.uid,input:data,commandHash:digest(data),state:'Blocked',sessionId:lock.sessionId,createdAt:Date.now()});return busy(lock.sessionId);}
+    if(lock){const blocking=scoped(await tx.get(ref('parcelLiveSessions',lock.sessionId)),scope);localAuthority(blocking.model);if(blocking.actorUid!==auth.uid||lock.actorUid!==auth.uid||lock.ownerId!==scope)fail();tx.create(ref('parcelLiveStartRequests',key),{ownerId:scope,actorUid:auth.uid,input:data,commandHash:digest(data),state:'Blocked',sessionId:lock.sessionId,createdAt:Date.now()});return busy(lock.sessionId);}
     const model=selectedModel(),createdAt=Date.now(),sessionId=randomUUID(),reasonCode=!model?'model-unavailable':!serviceReady()?'service-unavailable':null;
     const session=toPublicParcelLiveSession({ownerId:scope,actorUid:auth.uid,sessionId,...data,policy:POLICY,model,state:reasonCode?'Unavailable':'Open',createdAt,updatedAt:createdAt,expiresAt:parcelLiveSessionExpiresAt(createdAt),stoppedAt:null,version:1,generation:1,reservedCount:0,completedCount:0,inFlightFrameId:null,lastReservedAt:null,reasonCode});
     const receipt={ownerId:scope,actorUid:auth.uid,sessionId,startReceiptKey:key,nonce:randomUUID(),generation:1,expiresAt:session.expiresAt,state:'Started',input:data,commandHash:digest(data),snapshot:snapshot(config,account,current),model,policy:POLICY};
@@ -100,7 +104,7 @@ async function claim(auth,scope,data,ingestHash){return scopedTx(auth,scope,ROLE
   tx.update(ref('parcelLiveFrameRequests',r.frameReceiptKey),{ingestHash});tx.set(ref('parcelLiveFrames',r.frameReceiptKey),running);return {b,frame:running,receipt:{...r,ingestHash}};
 });}
 async function complete(auth,scope,expected,outcome,deadline,{checkpoint=false}={}){return scopedTx(auth,scope,ROLES,async(tx,config,account)=>{
-  const b=await load(tx,scope,expected.sessionId),{f,r}=await getFrame(tx,scope,b,expected.frameId);
+  const b=await load(tx,scope,expected.sessionId,undefined,true),{f,r}=await getFrame(tx,scope,b,expected.frameId);
   if(!same(r,expected)||!matchesParcelLiveFrameClaim(r,expected))fail();if(!['Reserved','Running'].includes(f.state))return toPublicParcelLiveFrame(f);
   const current=await context(tx,scope,f.shipmentId),reason=staleReason(b,config,account,current),time=Date.now();
   if(time>=b.session.expiresAt){closeSession(tx,b,'Expired','session-expired',time);return toPublicParcelLiveFrame({...f,...blank,state:'Expired',reasonCode:'frame-expired',completedAt:time,updatedAt:time,version:f.version+1});}
@@ -115,7 +119,7 @@ async function complete(auth,scope,expected,outcome,deadline,{checkpoint=false}=
 // permission is granted by this path, and every original coordinate is checked.
 async function cleanup(expected){guardParcelLiveOperation();await db().runTransaction(async original=>{
   const tx=guardParcelLiveTransaction(original);
-  const b=await load(tx,expected.ownerId,expected.sessionId),{f,r}=await getFrame(tx,expected.ownerId,b,expected.frameId);if(!same(r,expected)||!matchesParcelLiveFrameClaim(r,expected)||!['Reserved','Running'].includes(f.state))return;
+  const b=await load(tx,expected.ownerId,expected.sessionId,undefined,true),{f,r}=await getFrame(tx,expected.ownerId,b,expected.frameId);if(!same(r,expected)||!matchesParcelLiveFrameClaim(r,expected)||!['Reserved','Running'].includes(f.state))return;
   const time=Date.now();if(b.session.state==='Open')closeSession(tx,b,time>=b.session.expiresAt?'Expired':'Stale',time>=b.session.expiresAt?'session-expired':'access-changed',time);
   guardParcelLiveOperation();
 });}
@@ -160,7 +164,8 @@ async function revalidate(f,deadline){let stream,cancelled=false;const cancel=()
   const object=storageObject(f,deadline,f.image.generation),[before]=await object.getMetadata();guardParcelLiveOperation();if(cancelled||!same(identity(before,f),f.image))throw problem('storage-failed');stream=object.createReadStream();const buffer=Buffer.alloc(f.bytes);let size=0;for await(const chunk of stream){guardParcelLiveOperation();if(cancelled)throw problem('time-limit');const b=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);if(size+b.length>buffer.length)throw problem('resource-limit');b.copy(buffer,size);size+=b.length;}guardParcelLiveOperation();verifyBytes(buffer.subarray(0,size),f);const [after]=await object.getMetadata();guardParcelLiveOperation();if(cancelled||!same(identity(after,f),f.image))throw problem('storage-failed');
 },remaining(deadline,10000),cancel);}catch(e){throw e.liveDeadline||e.reasonCode?e:problem('storage-failed');}finally{unsubscribe();stream?.destroy();}}
 async function infer(buffer,f,deadline){const controller=new AbortController();let reader;const cancel=()=>{controller.abort();if(reader)void reader.cancel().catch(()=>{});},unsubscribe=onParcelLiveCancel(cancel);try{return await bounded(async()=>{
-  guardParcelLiveOperation();const response=await fetch(`${process.env.RESEARCH_API_URL.replace(/\/$/,'')}/predict/live-parcel`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.RESEARCH_API_TOKEN}`},body:JSON.stringify({intendedUse:'sampled-live',sessionId:f.sessionId,frameId:f.frameId,sequence:f.sequence,imageBase64:buffer.toString('base64')}),signal:controller.signal});if(controller.signal.aborted){void response.body?.cancel().catch(()=>{});throw problem('time-limit');}guardParcelLiveOperation();if(!response.ok){void response.body?.cancel().catch(()=>{});throw problem([429,503].includes(response.status)?'service-unavailable':'service-failed');}if(!response.body)throw problem('invalid-response');reader=response.body.getReader();const chunks=[];let size=0;while(true){guardParcelLiveOperation();const {done,value}=await reader.read();guardParcelLiveOperation();if(done)break;size+=value.byteLength;if(size>16384)throw problem('resource-limit');chunks.push(Buffer.from(value));}let parsed;try{parsed=JSON.parse(Buffer.concat(chunks,size).toString('utf8'));return validateParcelLiveResponse(parsed,{acceptance:f.model,evidenceSha256:f.sha256,sessionId:f.sessionId,frameId:f.frameId,sequence:f.sequence});}catch{throw problem('invalid-response');}
+  localAuthority(f.model);
+  guardParcelLiveOperation();const response=await fetch(`${process.env.RESEARCH_API_URL.replace(/\/$/,'')}/predict/live-parcel`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.RESEARCH_API_TOKEN}`},body:JSON.stringify({intendedUse:'sampled-live',sessionId:f.sessionId,frameId:f.frameId,sequence:f.sequence,imageBase64:buffer.toString('base64')}),signal:controller.signal});if(controller.signal.aborted){void response.body?.cancel().catch(()=>{});throw problem('time-limit');}guardParcelLiveOperation();if(!response.ok){void response.body?.cancel().catch(()=>{});throw problem([429,503].includes(response.status)?'service-unavailable':'service-failed');}if(!response.body)throw problem('invalid-response');reader=response.body.getReader();const chunks=[];let size=0;while(true){guardParcelLiveOperation();const {done,value}=await reader.read();guardParcelLiveOperation();if(done)break;size+=value.byteLength;if(size>16384)throw problem('resource-limit');chunks.push(Buffer.from(value));}let parsed;try{parsed=JSON.parse(Buffer.concat(chunks,size).toString('utf8'));return isParcelLocalEvaluationModel(f.model)?validateParcelLocalEvaluationLiveResponse(parsed,{model:f.model,evidenceSha256:f.sha256,sessionId:f.sessionId,frameId:f.frameId,sequence:f.sequence}):validateParcelLiveResponse(parsed,{acceptance:f.model,evidenceSha256:f.sha256,sessionId:f.sessionId,frameId:f.frameId,sequence:f.sequence});}catch{throw problem('invalid-response');}
 },remaining(deadline,30000),cancel);}catch(e){throw e.liveDeadline||e.reasonCode?e:problem('service-failed');}finally{unsubscribe();cancel();}}
 export const analyseParcelLiveFrame=safe(async(auth,scope,input)=>{
   const operationDeadline=parcelLiveOperationDeadline(),data=validateAnalyseParcelLiveFrame(input),ingestHash=await parcelLiveIngestDigest(data),claimed=await claim(auth,scope,data,ingestHash);if(claimed.result)return claimed.result;
@@ -183,6 +188,34 @@ async function resolve(auth,scope,data,wantFrame){return scopedTx(auth,scope,ROL
 export const resolveParcelLiveSession=safe((auth,scope,input)=>resolve(auth,scope,validateResolveParcelLiveSession(input),false));
 export const resolveParcelLiveFrame=safe((auth,scope,input)=>resolve(auth,scope,validateResolveParcelLiveFrame(input),true));
 export const stopParcelLiveSession=safe(async(auth,scope,input)=>{const data=validateStopParcelLiveSession(input);return scopedTx(auth,scope,ROLES,async(tx,_config,account)=>{const b=await load(tx,scope,data.sessionId);if(auth.uid!==b.session.actorUid&&!['Admin','Manager'].includes(account.role))fail('permission-denied');if(b.session.state!=='Open')return toPublicParcelLiveSession(b.session);const time=Date.now();return closeSession(tx,b,time>=b.session.expiresAt?'Expired':'Stopped',time>=b.session.expiresAt?'session-expired':'user-stop',time);});});
+export const cleanupParcelLiveSession=safe(async(auth,scope,input)=>{
+  const {sessionId}=validateResolveParcelLiveSession(input);
+  return scopedTx(auth,scope,ROLES,async(tx,_config,account)=>{
+    const b=await load(tx,scope,sessionId,undefined,true),{session,receipt,lock,frame,frameReceipt}=b;
+    if(auth.uid!==session.actorUid&&!['Admin','Manager'].includes(account.role))fail('permission-denied');
+    if(session.state!=='Open'&&!['Expired','Stale'].includes(session.state))return {released:false};
+    validateStartParcelLiveSession(receipt.input);
+    const original=receipt.snapshot;
+    if(receipt.generation!==1||!matchesParcelLiveActorLock(receipt,receipt)||original?.config?.dataScopeId!==scope||original.shipment?.ownerId!==scope||original.plan&&original.plan.ownerId!==scope||!eligible(scope,session.actorUid,original.account,session.stage,{shipment:original.shipment,plan:original.plan}))fail();
+    const current=await context(tx,scope,session.shipmentId);if(current.plan&&current.plan.ownerId!==scope)fail();
+    if(session.state!=='Open'){
+      if(session.generation!==receipt.generation+1)fail();
+      if(lock&&!matchesParcelLiveActorLock(receipt,lock)&&(lock.sessionId===session.sessionId||lock.ownerId!==scope||lock.actorUid!==session.actorUid||!matchesParcelLiveActorLock(lock,lock)))fail();
+      if(matchesParcelLiveActorLock(receipt,lock))tx.delete(ref('parcelLiveActorLocks',await actorKey(scope,session.actorUid)));
+      return {released:true};
+    }
+    if(session.generation!==receipt.generation||!matchesParcelLiveActorLock(receipt,lock))fail();
+    if(frame){
+      toPublicParcelLiveFrame(frame);
+      if(!['Reserved','Running'].includes(frame.state)||frame.shipmentId!==session.shipmentId||frame.stage!==session.stage||frame.sessionGeneration!==session.generation||frame.sequence!==session.reservedCount||frame.reservedAt!==session.lastReservedAt||frame.expiresAt!==Math.min(frame.reservedAt+60000,session.expiresAt)||!matchesParcelLiveFrameClaim(frameReceipt,frameReceipt))fail();
+    }
+    let authorityLost=false;
+    if(isParcelLocalEvaluationModel(session.model)){try{assertParcelLocalEvaluationAuthority(session.model);}catch{authorityLost=true;}}
+    const time=Date.now();if(time<session.expiresAt&&!authorityLost)return {released:false};
+    closeSession(tx,b,time>=session.expiresAt?'Expired':'Stale',time>=session.expiresAt?'session-expired':'model-changed',time);
+    return {released:true};
+  });
+});
 export const reviewParcelLiveFrame=safe(async(auth,scope,input)=>{
   const deadline=parcelLiveOperationDeadline(),data=validateReviewParcelLiveFrame(input),prepared=await scopedTx(auth,scope,['Admin','Manager'],async(tx,config,account)=>{const b=await load(tx,scope,data.sessionId),{f}=await getFrame(tx,scope,b,data.frameId);reviewParcelLiveFrameRecord(f,data,{role:account.role,reviewerUid:auth.uid,nowMs:Date.now()});if(f.retention!=='Verified'||!f.image)fail();return {frame:f,account:snapshot(config,account,{shipment:{ownerId:scope,status:'Review',version:0},plan:null}).account,config:{dataScopeId:config.dataScopeId,version:config.version??null}};});
   await revalidate(prepared.frame,Math.min(deadline,Date.now()+10000));

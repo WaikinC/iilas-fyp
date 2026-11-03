@@ -9,7 +9,7 @@ import {toSafeParcelLiveModel} from './parcelLive.js';
 export function requireParcelLiveAcceptance(acceptance){
   try{
     const safe=toSafeParcelLiveModel(acceptance);
-    if(!safe||Reflect.ownKeys(acceptance).length!==Reflect.ownKeys(safe).length)throw new Error();
+    if(!safe||safe.acceptanceSha256===null||Object.hasOwn(acceptance,'evaluationKind')||Object.hasOwn(acceptance,'evaluationManifestSha256')||Reflect.ownKeys(acceptance).length!==Reflect.ownKeys(safe).length)throw new Error();
     return safe;
   }catch{
     const error=new Error('Live parcel analysis is unavailable until a model has trusted sampled-live acceptance.');error.code='unavailable';throw error;

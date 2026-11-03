@@ -6,6 +6,7 @@ service firebase.storage {
         && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'Approved'
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['Admin','Manager','Inventory','Warehouse','Logistics','Driver','Viewer']
         && firestore.get(/databases/(default)/documents/system/config).data.dataScopeId == scope;
     }
     function assigned(scope, shipment) {

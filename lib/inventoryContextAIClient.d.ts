@@ -1,0 +1,3 @@
+import type {ExperimentInput,Outcome} from './inventoryAI';
+import type {ContextScenario,ContextExperimentInput} from './inventoryContextAI';
+export function createInventoryContextAIClient(options:{storage:Pick<Storage,'getItem'|'setItem'|'removeItem'>;context:{uid:string;scope:string};isCurrent:()=>boolean;command:(action:string,input:ContextExperimentInput|ExperimentInput)=>Promise<unknown>}):{pending:()=>ContextExperimentInput|null;legacyPending:()=>ExperimentInput|null;start:(scenario:ContextScenario)=>Promise<Outcome>;retry:()=>Promise<Outcome>;resolve:()=>Promise<Outcome>;resolveLegacy:()=>Promise<Outcome>};

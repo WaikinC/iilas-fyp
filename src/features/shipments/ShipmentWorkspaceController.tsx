@@ -1,0 +1,67 @@
+import {useCallback,useEffect,useId,useLayoutEffect,useRef,useState} from 'react';
+import type {Membership} from '../workspace/WorkspaceGate';
+import {createShipmentCommandRunner,type ShipmentCommandPorts,type ShipmentCommandResult,type ShipmentIntent} from './shipmentCommands';
+import {selectShipmentRows,dispatchShipmentInput,shipmentPermissions,shipmentWorkspaceKey,shipmentText as text,type ShipmentArea,type ShipmentFilters,type ShipmentInput,type ShipmentRow,type ShipmentSources,type ShipmentPlanState} from './shipmentPresentation';
+import ShipmentTabs,{shipmentAreas} from './ShipmentTabs';
+import ShipmentQueue from './ShipmentQueue';
+import ShipmentDetail from './ShipmentDetail';
+import ShipmentEditor from './ShipmentEditor';
+import DispatchConfirmation,{type DispatchSnapshot} from './DispatchConfirmation';
+import ShipmentDialog from './ShipmentDialog';
+import './shipments.css';
+import {useAppNavigation} from '../navigation/AppNavigation';
+import {appRoutePath} from '../../../lib/appRoutes';
+export type ShipmentExitGuard=(((leave:()=>void,cancel?:()=>void)=>void)&{beforeUnload?:()=>boolean})|null;
+export type ShipmentControllerProps={member:Membership;products:ShipmentRow[];shipments:ShipmentRow[];handovers:ShipmentRow[];activities:ShipmentRow[];sources:ShipmentSources;onNavigate:(module:'warehouse'|'transport'|'delivery')=>void;registerExitGuard:(guard:ShipmentExitGuard)=>void;commands:ShipmentCommandPorts;usePlan:(scope:string,id:string|null)=>ShipmentPlanState;creationBlocked?:boolean};
+type Editor={original:ShipmentRow|null;planRevision:number;key:number};
+const filters=():Record<ShipmentArea,ShipmentFilters&{page:number}>=>(Object.fromEntries(shipmentAreas.map(([key])=>[key,{search:'',status:'',page:1}])) as Record<ShipmentArea,ShipmentFilters&{page:number}>);
+export default function ShipmentWorkspaceController(props:ShipmentControllerProps){
+ return <ShipmentBody key={shipmentWorkspaceKey(props.member)} {...props}/>;
+}
+function ShipmentBody({member,products,shipments,handovers,activities,sources,onNavigate,registerExitGuard,commands,usePlan,creationBlocked=false}:ShipmentControllerProps){
+ const routing=useAppNavigation(),goRoute=routing?.go;
+ const prefix=useId(),[area,setArea]=useState<ShipmentArea>('all'),[queries,setQueries]=useState(filters),[localSelectedId,setLocalSelectedId]=useState<string|null>(null),[editor,setEditor]=useState<Editor|null>(null),[dispatch,setDispatch]=useState<DispatchSnapshot|null>(null),[deletion,setDeletion]=useState<ShipmentRow|null>(null),[busy,setBusy]=useState(false),[feedback,setFeedback]=useState(''),[error,setError]=useState(''),[dirtyDialog,setDirtyDialog]=useState(false);
+ const selectedId=routing?.route.module==='shipments'?routing.route.recordId:localSelectedId;
+ const setSelectedId=(id:string|null)=>{if(routing)routing.go('shipments',id);else setLocalSelectedId(id);};
+ const dirty=useRef(false),nextKey=useRef(0),leaveTarget=useRef<(()=>void)|null>(null),cancelTarget=useRef<(()=>void)|null>(null),opener=useRef<HTMLElement|null>(null),heading=useRef<HTMLHeadingElement>(null);
+ const plan=usePlan(member.workspaceId,selectedId),selected=shipments.find(s=>s.id===selectedId)||null,authorityKey=shipmentWorkspaceKey(member),runtime=useRef({authorityKey,generation:0,allowed:true});
+
+ const runner=useRef<ReturnType<typeof createShipmentCommandRunner>|null>(null);
+ const closeEditor=useCallback(()=>{dirty.current=false;setEditor(null);},[]);
+ const onResult=useCallback((r:ShipmentCommandResult)=>{if(r.kind==='error'){setError(r.message);return;}setFeedback(r.message);setError('');closeEditor();setDispatch(null);setDeletion(null);if(r.intent.kind==='remove'){setLocalSelectedId(null);requestAnimationFrame(()=>{if(runtime.current.authorityKey===authorityKey&&runtime.current.allowed)goRoute?.('shipments');heading.current?.focus();});}else if(r.intent.input.status==='Dispatched')requestAnimationFrame(()=>document.querySelector<HTMLElement>('[data-shipment-detail-heading]')?.focus());},[closeEditor,goRoute,authorityKey]);
+ useEffect(()=>{runtime.current.allowed=member.status==='Approved'&&member.active===true&&['Admin','Manager','Logistics'].includes(member.role);const lifetime=runtime.current,active=createShipmentCommandRunner(commands,()=>lifetime,onResult);runner.current=active;return()=>{active.retire();lifetime.allowed=false;};},[commands,member.status,member.active,member.role,onResult]);
+ const current=useRef({busy,editor});useLayoutEffect(()=>{current.current={busy,editor};},[busy,editor]);
+ const requestLeave=useCallback((leave:()=>void,cancel:()=>void=()=>{})=>{if(current.current.busy||runner.current?.isBusy()){setFeedback('Wait for the current shipment request to finish.');cancel();return;}if(current.current.editor&&dirty.current){leaveTarget.current=leave;cancelTarget.current=cancel;setDirtyDialog(true);return;}leave();},[]);
+ useEffect(()=>{const guard=Object.assign((leave:()=>void,cancel?:()=>void)=>requestLeave(()=>{closeEditor();setDispatch(null);setDeletion(null);runtime.current.generation++;leave();},cancel),{beforeUnload:()=>Boolean(dirty.current||current.current.busy||runner.current?.isBusy())});registerExitGuard(guard);return()=>{leaveTarget.current=null;cancelTarget.current=null;registerExitGuard(null);};},[registerExitGuard,requestLeave,closeEditor]);
+ const permissions=shipmentPermissions({member,shipment:selected,handovers,sources,plan});
+ const editorPermissions=shipmentPermissions({member,shipment:editor?.original||null,handovers,sources,plan});
+ const latestEditor=editor?.original?shipments.find(s=>s.id===editor.original?.id):null;
+ const editorStale=!!editor&&(editor.original?(!latestEditor||latestEditor.version!==editor.original.version||!editorPermissions.edit||plan.revision!==editor.planRevision):!editorPermissions.create||creationBlocked);
+ const dispatchStale=!!dispatch&&(!selected||selected.id!==dispatch.shipment.id||selected.version!==dispatch.shipment.version||!permissions.dispatch||plan.revision!==dispatch.planRevision);
+ const deletionStale=!!deletion&&(!selected||selected.id!==deletion.id||selected.version!==deletion.version||!permissions.delete);
+ const live=useRef({editorStale,dispatchStale,deletionStale,editorPermissions,permissions});useLayoutEffect(()=>{live.current={editorStale,dispatchStale,deletionStale,editorPermissions,permissions};},[editorStale,dispatchStale,deletionStale,editorPermissions,permissions]);
+ const query=queries[area],matches=selectShipmentRows(shipments,area,query),maxPage=Math.max(1,Math.ceil(matches.length/10)),page=Math.min(query.page,maxPage),rows=matches.slice((page-1)*10,page*10),areaLabel=shipmentAreas.find(([key])=>key===area)![1];
+ function begin(){runtime.current.generation++;setFeedback('');setError('');}
+ function edit(original:ShipmentRow|null){requestLeave(()=>{begin();dirty.current=false;setEditor({original:original?structuredClone(original):null,planRevision:plan.revision,key:++nextKey.current});});}
+ function open(id:string){requestLeave(()=>{closeEditor();setDispatch(null);setDeletion(null);begin();opener.current=document.activeElement as HTMLElement;setSelectedId(id);});}
+ function back(){requestLeave(()=>{closeEditor();setSelectedId(null);setDispatch(null);setDeletion(null);begin();requestAnimationFrame(()=>{const trigger=[...document.querySelectorAll<HTMLElement>('[data-shipment-open]')].find(el=>el.dataset.shipmentOpen===selectedId);if(trigger)trigger.focus();else if(opener.current?.isConnected)opener.current.focus();else heading.current?.focus();});});}
+ useEffect(()=>{if(selectedId)document.querySelector<HTMLElement>('[data-shipment-detail-heading]')?.focus();},[selectedId]);
+ async function run(intent:ShipmentIntent){
+  if(!runner.current||runner.current.isBusy())return;
+  const state=live.current;if(intent.kind==='remove'?state.deletionStale||!state.permissions.delete:intent.input.status==='Dispatched'?state.dispatchStale||!state.permissions.dispatch:state.editorStale||!(intent.kind==='save'&&intent.original?state.editorPermissions.edit:state.editorPermissions.create))return;
+  setError('');const promise=runner.current.run(intent,{authorityKey,generation:runtime.current.generation});setBusy(true);
+  try{await promise;}finally{if(runtime.current.authorityKey===authorityKey&&runtime.current.allowed)setBusy(false);}
+ }
+ const markDirty=useCallback((value:boolean)=>{dirty.current=value;},[]);
+ const close=()=>requestLeave(()=>{closeEditor();setError('');});
+ return <div className="shipments-workspace"><header className="shipment-heading"><div><h1>Order & Dispatch</h1><p>Prepare the shipment. Check the handover. Confirm dispatch.</p></div>{permissions.create&&<button className="shipment-primary" disabled={busy||creationBlocked} onClick={()=>edit(null)}>New shipment</button>}</header>
+ <ShipmentTabs value={area} idPrefix={prefix} onChange={next=>requestLeave(()=>setArea(next))}/>{feedback&&<p role="status" className="shipment-notice">{feedback}</p>}{error&&!editor&&!dispatch&&!deletion&&<p role="alert" className="shipment-notice error">{error}</p>}
+ <section role="tabpanel" id={`${prefix}-panel`} aria-labelledby={`${prefix}-${area}`}><section className="shipment-surface"><h2 ref={heading} tabIndex={-1}>{areaLabel}</h2><div className="shipment-toolbar"><label>Search shipments<input value={query.search} placeholder="Reference, recipient, destination or driver" onChange={e=>setQueries(q=>({...q,[area]:{...q[area],search:e.target.value,page:1}}))}/></label><label>Shipment status<select value={query.status} onChange={e=>setQueries(q=>({...q,[area]:{...q[area],status:e.target.value,page:1}}))}><option value="">All statuses</option>{['Draft','Prepared','Dispatched','Unknown'].map(s=><option key={s}>{s}</option>)}</select></label></div>
+ {!selectedId?<><ShipmentQueue rows={rows} loading={sources.shipments.loading} error={sources.shipments.error} handovers={handovers} onOpen={open}/><div className="shipment-pager"><span>{matches.length?`${(page-1)*10+1}–${Math.min(page*10,matches.length)} of ${matches.length} loaded shipments`:'0 loaded shipments'}</span><button disabled={page===1||busy} onClick={()=>setQueries(q=>({...q,[area]:{...q[area],page:page-1}}))}>Previous</button><span>Page {page}</span><button disabled={page===maxPage||busy} onClick={()=>setQueries(q=>({...q,[area]:{...q[area],page:page+1}}))}>Next</button></div></>:selected?<>{!matches.some(r=>r.id===selectedId)&&<p className="shipment-notice">Selected shipment {text(selected.reference)||selected.id} is outside this view. It remains open.</p>}<a className="record-page-link" href={appRoutePath('shipments',selected.id)} target="_blank" rel="noopener noreferrer">Open this shipment in a new tab</a><ShipmentDetail shipment={selected} handovers={handovers} plan={plan} activities={activities} activitySource={sources.activities} handoverSource={sources.handovers} permissions={permissions} onBack={back} onEdit={()=>edit(selected)} onDelete={()=>{if(permissions.delete){begin();setDeletion(structuredClone(selected));}}} onReviewDispatch={()=>{if(permissions.dispatch&&plan.row){begin();setDispatch({shipment:structuredClone(selected),plan:structuredClone(plan.row),input:dispatchShipmentInput(selected,plan.row),planRevision:plan.revision});}}} onNavigate={module=>requestLeave(()=>onNavigate(module))}/></>:<><p role="alert">The selected shipment is no longer available. No changes can be submitted.</p><button onClick={back}>Back to shipments</button></>}
+ </section></section>
+ {editor&&<ShipmentEditor key={editor.key} original={editor.original} products={products} permissions={editorPermissions} busy={busy} stale={editorStale} error={error} onSubmit={(input:ShipmentInput)=>void run(editor.original?{kind:'save',input,original:editor.original}:{kind:'create',input})} onRequestClose={close} onDirtyChange={markDirty} trap={!dirtyDialog}/>}
+ {dispatch&&<DispatchConfirmation snapshot={dispatch} busy={busy} stale={dispatchStale} error={error} onClose={()=>{if(!busy){setDispatch(null);setError('');}}} onConfirm={()=>void run({kind:'save',input:dispatch.input,original:dispatch.shipment})}/>}
+ {deletion&&<ShipmentDialog title="Delete draft" busy={busy} onClose={()=>{if(!busy)setDeletion(null);}}><p>Delete draft {text(deletion.reference)}? It must have no active warehouse work or scheduled transport.</p>{(error||deletionStale)&&<p role="alert" className="shipment-notice error">{error||'The source changed. Close and review current records.'}</p>}<footer><button disabled={busy} onClick={()=>setDeletion(null)}>Keep draft</button><button className="shipment-danger" disabled={busy||deletionStale} onClick={()=>void run({kind:'remove',original:deletion})}>Delete draft</button></footer></ShipmentDialog>}
+ {dirtyDialog&&<ShipmentDialog title="Discard unsaved changes?" onClose={()=>{leaveTarget.current=null;cancelTarget.current?.();cancelTarget.current=null;setDirtyDialog(false);}}><p>Your changes will be lost if you discard them.</p><footer><button data-dialog-initial-focus onClick={()=>{leaveTarget.current=null;cancelTarget.current?.();cancelTarget.current=null;setDirtyDialog(false);}}>Keep editing</button><button className="shipment-danger" onClick={()=>{const leave=leaveTarget.current;leaveTarget.current=null;cancelTarget.current=null;dirty.current=false;setDirtyDialog(false);closeEditor();leave?.();}}>Discard changes</button></footer></ShipmentDialog>}
+ </div>;
+}

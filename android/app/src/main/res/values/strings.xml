@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">IILAS Driver Demo</string>
+    <string name="title_activity_main">IILAS Driver Demo</string>
+    <string name="package_name">com.iilas.fyp.driverdemo</string>
+    <string name="custom_url_scheme">com.iilas.fyp.driverdemo</string>
+</resources>

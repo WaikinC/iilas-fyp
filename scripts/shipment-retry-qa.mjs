@@ -125,7 +125,7 @@ for (const [label, changes] of [
     const state = fixture();
     database = state.db;
     const before = structuredClone(state.records);
-    await assert.rejects(dispatch({...state.shipment, ...changes}), /Prepared items and packing details are locked/);
+    await assert.rejects(dispatch({...state.shipment, ...changes}), label==='reference'?/stored business code is locked/:/Prepared items and packing details are locked/);
     assert.deepEqual(state.records, before);
   });
 }

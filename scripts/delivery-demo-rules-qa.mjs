@@ -1,0 +1,12 @@
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';import {test} from 'node:test';
+const api=await import('../backend/functions/deliveryDemoSource.mjs').catch(()=>null);
+const now=Date.parse('2026-10-24T10:00:00Z'),ts=ms=>({seconds:Math.floor(ms/1000),nanoseconds:(ms%1000)*1e6});
+const fixture=patch=>({shipmentId:'s',shipment:{ownerId:'scope',version:1,status:'Dispatched',parcelCount:2,expectedDelivery:'2026-10-25',dispatchedAt:ts(now-3600000),driverUid:'driver'},delivery:null,events:[],plan:{ownerId:'scope',version:1,driverUid:'driver'},proof:null,observedAtMs:now,...patch});
+test('empty proven query is dispatch, unknown/mismatched history is never zero',()=>{assert(api);const x=api.analyseDeliveryRecords(fixture());assert.equal(x.facts.currentStatus,'Dispatched');assert.equal(x.facts.statusEventCount,0);const bad=api.analyseDeliveryRecords(fixture({events:[{id:'e',status:'In Transit',previousStatus:'Dispatched',version:1,createdAt:ts(now-1000)}]}));assert.equal(bad.facts,null);});
+test('future events, invalid deadlines and event capacity refuse model facts',()=>{assert(api);for(const patch of [{events:Array.from({length:1001},(_,i)=>({id:String(i)}))},{shipment:{...fixture().shipment,expectedDelivery:'2026-02-30'}},{events:[{id:'future',status:'In Transit',previousStatus:'Dispatched',version:1,createdAt:ts(now+1)}]}])assert.equal(api.analyseDeliveryRecords(fixture(patch)).facts,null);});
+test('current assignment and source identity are included in digest',()=>{assert(api);const a=api.analyseDeliveryRecords(fixture()),b=api.analyseDeliveryRecords(fixture({plan:{...fixture().plan,driverUid:'other'}}));assert.notEqual(a.sourceSha256,b.sourceSha256);});
+
+test('malformed calendar date is unavailable rather than throwing',()=>{const x=api.analyseDeliveryRecords(fixture({shipment:{...fixture().shipment,expectedDelivery:'2026-99-99'}}));assert.equal(x.facts,null);assert(x.unavailableReasons.includes('invalid_expected_window'));});
+
+test('new public results have shared reads only and private receipts deny all clients',()=>{const rules=readFileSync(new URL('../firestore.rules',import.meta.url),'utf8');for(const name of ['deliveryAIExperiments','deliveryAbnormalityAssessments','deliveryRiskReviews'])assert(rules.includes('match /'+name+'/{id} { allow read: if shared(resource.data); allow write: if false; }'));for(const name of ['deliveryAIRequests','deliveryAssessmentRequests','deliveryReviewRequests'])assert(rules.includes('match /'+name+'/{id} { allow read, write: if false; }'));});

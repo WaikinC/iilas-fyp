@@ -1,8 +1,10 @@
 import {getFirestore, FieldValue} from 'firebase-admin/firestore';
 import {getAuth} from 'firebase-admin/auth';
 import {inputText,inputNumber} from './procurementValidation.js';
+import {prepareEmptyBusinessCodeBootstrap} from './businessCodeInitialization.mjs';
 
-export const ROLES=['Admin','Manager','Inventory','Warehouse','Logistics','Driver','Viewer'];
+import {STAFF_ROLES as ROLES,ACCOUNT_ROLES} from './accountRoles.js';
+export {ROLES,ACCOUNT_ROLES};
 const fail=(message,code='failed-precondition')=>{const error=new Error(message);error.code=code;throw error;};
 const now=()=>FieldValue.serverTimestamp();
 const label=value=>inputText(value,'Display name',80);
@@ -19,7 +21,10 @@ export async function registerAccount(auth,input){
     const config=await tx.get(configRef()),saved=await tx.get(userRef(auth.uid)),old=saved.data();
     if(!config.exists&&isBootstrap){
       if(!emulator&&!identity.emailVerified)fail('Verify the configured administrator email before initial setup.');
+      const localNumbering=process.env.FUNCTIONS_EMULATOR==='true'&&process.env.GCLOUD_PROJECT==='fyp-inventory-and-logistics'&&process.env.GOOGLE_CLOUD_PROJECT==='fyp-inventory-and-logistics'&&process.env.FIRESTORE_EMULATOR_HOST==='127.0.0.1:8081'&&process.env.FIREBASE_AUTH_EMULATOR_HOST==='127.0.0.1:9099'&&process.env.FIREBASE_STORAGE_EMULATOR_HOST==='127.0.0.1:9199'&&process.env.IILAS_FYP_COMPLETION_MODE==='local-demo';
+      const initializeNumbers=localNumbering?await prepareEmptyBusinessCodeBootstrap(tx,auth.uid):null;
       tx.create(configRef(),{dataScopeId:auth.uid,primaryAdminUid:auth.uid,version:1,createdAt:now()});
+      if(initializeNumbers)initializeNumbers();
       const version=(old?.version||0)+1;
       tx.set(userRef(auth.uid),{uid:auth.uid,email,displayName:label(input.displayName===undefined?(old?.displayName||'Administrator'):input.displayName),role:'Admin',status:'Approved',active:true,emailVerified:identity.emailVerified,version,createdAt:old?.createdAt||now(),updatedAt:now(),reviewedBy:auth.uid});
       event(tx,auth.uid,auth.uid,auth.uid,version,'Initial administrator');
@@ -45,7 +50,7 @@ export async function approvedTransaction(auth,roles,work,guard){
     const tx=guard?guard(original):original;
     const config=await tx.get(configRef()),profile=await tx.get(userRef(auth.uid));
     const account=profile.data();
-    if(!config.exists||!account||account.status!=='Approved'||!account.active||!roles.includes(account.role))fail('Your account is not approved for this operation.','permission-denied');
+    if(!config.exists||!account||account.status!=='Approved'||!account.active||!ROLES.includes(account.role)||!roles.includes(account.role))fail('Your account is not approved for this operation.','permission-denied');
     if(guard)guard(original);
     const result=await work(tx,config.data(),account);
     if(guard)guard(original);
@@ -72,14 +77,14 @@ export async function updateAccount(auth,input){
     if(input.step==='Approve'){
       if(old.status==='Approved'&&old.active)fail('This account is already approved.');
       if(identity.disabled||(!process.env.FIREBASE_AUTH_EMULATOR_HOST&&!identity.emailVerified))fail('The account must be enabled and its email verified before approval.');
-      if(!ROLES.includes(input.role))fail('Choose a valid staff role.');
+      if(!ACCOUNT_ROLES.includes(input.role))fail('Choose a valid account role.');
       role=input.role;status='Approved';active=true;
     }else if(input.step==='Reject'){
       if(old.status!=='Pending')fail('Only pending accounts can be rejected.');status='Rejected';active=false;
     }else if(input.step==='Disable'){
       if(old.status!=='Approved'||!old.active)fail('Only approved accounts can be disabled.');status='Disabled';active=false;
     }else{
-      if(old.status!=='Approved'||!old.active||!ROLES.includes(input.role))fail('Choose an approved account and valid role.');role=input.role;
+      if(old.status!=='Approved'||!old.active||!ACCOUNT_ROLES.includes(input.role))fail('Choose an approved account and valid role.');role=input.role;
     }
     const version=old.version+1;
     tx.update(userRef(uid),{displayName:label(input.displayName===undefined?old.displayName:input.displayName),role,status,active,email:identity.email.toLowerCase(),emailVerified:identity.emailVerified,version,reviewedBy:auth.uid,reviewedAt:now(),updatedAt:now()});

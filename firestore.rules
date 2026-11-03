@@ -9,7 +9,16 @@ service cloud.firestore {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'Approved'
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin','Manager','Inventory','Warehouse','Logistics','Driver','Viewer'];
+    }
+    // Customer approval permits the isolated server-projected portal only. It
+    // never qualifies an account for shared staff or private grant reads.
+    function approvedCustomer() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'Approved'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Customer';
     }
     function admin() { return approved() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin'; }
     function shared(data) { return approved() && data.ownerId == get(/databases/$(database)/documents/system/config).data.dataScopeId; }
@@ -28,6 +37,67 @@ service cloud.firestore {
     match /stockRequests/{id} {
       allow read, write: if false;
     }
+    // Delivery demo: server-written source/provenance and immutable review revisions.
+    match /deliveryAIExperiments/{id} { allow read: if shared(resource.data); allow write: if false; }
+    match /deliveryAbnormalityAssessments/{id} { allow read: if shared(resource.data); allow write: if false; }
+    match /deliveryRiskReviews/{id} { allow read: if shared(resource.data); allow write: if false; }
+    match /deliveryAIRequests/{id} { allow read, write: if false; }
+    match /deliveryAssessmentRequests/{id} { allow read, write: if false; }
+    match /deliveryReviewRequests/{id} { allow read, write: if false; }
+    match /inventoryRiskRequests/{id} { allow read, write: if false; }
+    match /inventoryAIRequests/{id} { allow read, write: if false; }
+    match /inventoryContextAIRequests/{id} { allow read, write: if false; }
+    match /inventoryDemoProductAIRequests/{id} { allow read, write: if false; }
+    match /inventoryDemoReorderRequests/{id} { allow read, write: if false; }
+    match /inventoryDemoProcurementRequests/{id} { allow read, write: if false; }
+    // Links are immutable, server-written {ownerId,requirementId,purchaseOrderId,
+    // sourceSha256,...}. Before first creation, the client must distinguish an
+    // absent link for a known shared requirement from an unreadable record.
+    match /inventoryDemoProcurementLinks/{id} {
+      allow get: if approved() && (
+        (exists(/databases/$(database)/documents/inventoryDemoProcurementLinks/$(id)) && shared(resource.data))
+        || (!exists(/databases/$(database)/documents/inventoryDemoProcurementLinks/$(id))
+          && exists(/databases/$(database)/documents/inventoryDemoReorderRequirements/$(id))
+          && shared(get(/databases/$(database)/documents/inventoryDemoReorderRequirements/$(id)).data))
+      );
+      allow list: if shared(resource.data);
+      allow write: if false;
+    }
+    match /expectedReplenishments/{id} { allow read: if shared(resource.data); allow write: if false; }
+    match /inventoryDemoRiskAlerts/{id} { allow read: if shared(resource.data); allow write: if false; }
+    match /inventoryDemoReorderRequirements/{id} { allow read: if shared(resource.data); allow write: if false; }
+    match /inventoryDemoReorderEvents/{id} { allow read: if shared(resource.data); allow write: if false; }
+    match /inventoryAIExperiments/{id} {
+      allow read: if shared(resource.data);
+      allow write: if false;
+    }
+    match /inventoryRiskSnapshots/{id} {
+      allow read: if shared(resource.data);
+      allow write: if false;
+    }
+    match /inventoryRiskReviews/{id} {
+      allow read: if shared(resource.data);
+      allow write: if false;
+    }
+    // Private local-demo completion intents and immutable outcomes. Only trusted
+    // command transactions can access these; no client role can read or write.
+    match /completionRequests/{id} { allow read, write: if false; }
+    // Mobile immutable actor/payload receipts, capture leases and reserved proof
+    // targets are private trusted-command records, including for Admin/Driver.
+    match /mobileRequests/{id} { allow read, write: if false; }
+    match /mobileTrackingSessions/{id} { allow read, write: if false; }
+    match /mobileEvidenceRequests/{id} { allow read, write: if false; }
+    // {ownerId,customerUid,shipmentId,active,shareLocation,notes,version,...}:
+    // live grants are read and written only through scoped trusted commands.
+    match /customerShipmentGrants/{id} { allow read, write: if false; }
+    // Integrity requests retain signing/check leases and private recovery input.
+    match /integrityRequests/{id} { allow read, write: if false; }
+    match /integrityLocks/{id} { allow read, write: if false; }
+    // Observations and review revisions are shared staff history, written only
+    // by the trusted local-demo commands. A review never rewrites its check.
+    match /integrityChecks/{id} { allow read: if shared(resource.data); allow write: if false; }
+    match /integrityExceptions/{id} { allow read: if shared(resource.data); allow write: if false; }
+    match /integrityReviewEvents/{id} { allow read: if shared(resource.data); allow write: if false; }
     // Private immutable operation receipts and exact-coordinate evidence leases.
     match /parcelAnalysisRequests/{id} {
       allow read, write: if false;
@@ -69,6 +139,13 @@ service cloud.firestore {
       allow read: if shared(resource.data);
       allow write: if false;
     }
+    // Numbering policy/counters/assignments and original-actor creation receipts
+    // are private trusted-transaction state, never client-readable or writable.
+    match /businessCodeSettings/{id} { allow read, write: if false; }
+    match /businessCodeCounters/{id} { allow read, write: if false; }
+    match /businessCodeAssignments/{id} { allow read, write: if false; }
+    match /recordCreationRequests/{id} { allow read, write: if false; }
+    match /msiEvidenceIntents/{id} { allow read, write: if false; }
     match /{kind}/{id} {
       allow read: if kind in ['products','shipments','stockMovements','warehouseHandovers','auditLogs','suppliers','vehicles','drivers','purchaseOrders','transportPlans','deliveries','deliveryEvents','locations','locationHistory','approvals','evidence','fleetEvents','predictions','verificationRecords','resourceAssignments','uniqueKeys'] && shared(resource.data);
       allow write: if false;

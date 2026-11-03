@@ -1,0 +1,3 @@
+import type{RecordKind,RecordCreateInput,RecordCreateOutcome}from'./recordCreation';
+export type RecordCreationClient={activate:()=>void;dispose:()=>void;pending:(kind:RecordKind)=>RecordCreateInput|null;start:(input:{kind:RecordKind;data:Record<string,unknown>})=>Promise<RecordCreateOutcome>;retry:(kind:RecordKind)=>Promise<RecordCreateOutcome>;check:(kind:RecordKind)=>Promise<RecordCreateOutcome>;cancel:(kind:RecordKind)=>Promise<RecordCreateOutcome>};
+export function createRecordCreationClient(options:{storage:Pick<Storage,'getItem'|'setItem'|'removeItem'>;context:{uid:string;scope:string;environmentKey:string};command:(action:string,input:unknown)=>Promise<unknown>;isCurrent:()=>boolean}):RecordCreationClient;

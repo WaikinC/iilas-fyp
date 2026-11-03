@@ -1,0 +1,13 @@
+export type DeliveryFacts={expectedDurationHours:number;elapsedHours:number;failedAttempts:number;hasProof:boolean;statusEventCount:number;parcelCount:number;hoursSinceLastUpdate:number;currentStatus:'Dispatched'|'In Transit'|'Attempt Failed'};
+export type RuleAssessment={complete:boolean;unknowns:string[];dataReviewRequired:boolean;matches:{code:string;points:number;reason:string}[];score:number|null;level:'Low'|'Medium'|'High'|null;observedAtMs:number;ruleVersion:string};
+export const DELIVERY_PROTOCOL:string,DELIVERY_POLICY:string,DELIVERY_RULES:string;
+export const DELIVERY_CLASSES:readonly string[],DELIVERY_STATUSES:readonly string[],DELIVERY_FACTS:readonly string[],DELIVERY_FEATURES:readonly string[];
+export const DELIVERY_PROVENANCE:Readonly<Record<string,unknown>>;
+export function validateDeliveryFacts(v:unknown):DeliveryFacts;
+export function deliveryFeaturesForFacts(v:DeliveryFacts):Record<string,number>;
+export function validateDeliveryFeatures(v:unknown):Record<string,number>;
+export function deliveryFeaturePayload(v:Record<string,number>):string;
+export function teachingDeliveryLabel(v:DeliveryFacts):{label:string;reasons:string[];policyVersion:string};
+export function evaluateDeliveryRules(v:unknown):RuleAssessment;
+export function chooseDeliveryLabel(v:Record<string,number>):string;
+export function validateDeliveryPrediction(v:unknown,expected:Record<string,unknown>):Record<string,unknown>;

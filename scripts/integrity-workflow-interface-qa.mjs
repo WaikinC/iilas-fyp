@@ -1,0 +1,4 @@
+import {spawnSync} from 'node:child_process';
+const steps=[['--test','scripts/completion-contract-qa.mjs','scripts/completion-client-qa.mjs','scripts/completion-operation-qa.mjs','scripts/integrity-workflow-client-qa.mjs','scripts/integrity-workflow-contract-qa.mjs','scripts/integrity-workflow-command-qa.mjs'],['scripts/integrity-workflow-ui-qa.mjs'],['node_modules/typescript/bin/tsc','--noEmit','-p','tsconfig.app.json'],['node_modules/vite/bin/vite.js','build','--config','vite.config.ts'],['node_modules/eslint/bin/eslint.js','.','--ignore-pattern','dist','--ignore-pattern','.next']];
+for(const args of steps){const r=spawnSync(process.execPath,args,{stdio:'inherit'});if(r.status!==0)process.exit(r.status??1);}
+console.log('Integrity interface passed: common/backend/wallet cases, isolated 1440/390 browser fixtures, TypeScript/Vite build and lint (existing image warnings only). Real wallet acceptance remains separate.');

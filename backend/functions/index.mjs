@@ -1,10 +1,13 @@
 import {initializeApp} from 'firebase-admin/app';
-import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {onCall,onRequest, HttpsError} from 'firebase-functions/v2/https';
+import {customerEvidenceHandler} from './customerEvidence.mjs';
 import {defineSecret} from 'firebase-functions/params';
 
 initializeApp();
+export const customerEvidence=onRequest({region:process.env.IILAS_FUNCTIONS_REGION||'asia-southeast1',...(process.env.IILAS_DEMO_MODE==='cloud-demo'?{serviceAccount:process.env.IILAS_PROOF_SERVICE_ACCOUNT}:{}),timeoutSeconds:30,memory:'256MiB',maxInstances:2,concurrency:1,minInstances:0,cors:false},customerEvidenceHandler);
 const researchToken=defineSecret('RESEARCH_API_TOKEN');
-export const command = onCall({region:'asia-southeast1', timeoutSeconds:60, memory:'256MiB', maxInstances:10,secrets:process.env.FUNCTIONS_EMULATOR==='true'?[]:[researchToken]}, async request => {
+const gatewaySecret=defineSecret('IILAS_GATEWAY_SECRET');
+export const command = onCall({region:process.env.IILAS_FUNCTIONS_REGION||'asia-southeast1',...(process.env.IILAS_DEMO_MODE==='cloud-demo'?{serviceAccount:process.env.IILAS_RUNTIME_SERVICE_ACCOUNT}:{}), timeoutSeconds:60, memory:'256MiB', maxInstances:process.env.IILAS_DEMO_MODE==='cloud-demo'?2:10,concurrency:1,minInstances:0,secrets:process.env.FUNCTIONS_EMULATOR==='true'?[]:process.env.IILAS_DEMO_MODE==='cloud-demo'?[gatewaySecret]:[researchToken]}, async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
   try { const {executeCommand}=await import('./service.mjs'); return await executeCommand(request.auth, request.data); }
   catch (error) {

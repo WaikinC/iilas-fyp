@@ -1,0 +1,4 @@
+import type {StatisticsIdentity,StatisticsRequest,StatisticsResult,StatisticsTab} from './reportStatistics';
+export type StatisticsLoad={status:'idle'|'loading'|'ready'|'error';request:StatisticsRequest|null;result:StatisticsResult|null;error:string};
+export type StatisticsClientState={tab:StatisticsTab;selectedPreset:string;draft:StatisticsRequest|null;selected:StatisticsLoad;overview:Record<string,StatisticsLoad>};
+export function createReportStatisticsClient(options:{execute:(action:string,input:StatisticsRequest)=>Promise<unknown>;identity:StatisticsIdentity|null;onChange?:(state:StatisticsClientState)=>void;timeoutMs?:number}):{getSnapshot():StatisticsClientState;setIdentity(identity:StatisticsIdentity|null):void;setTab(tab:StatisticsTab):void;setDraft(request:StatisticsRequest):void;run():Promise<void>;refreshOverview(period:{dateFrom:string;dateTo:string}):Promise<void>;dispose():void};

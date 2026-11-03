@@ -1,13 +1,14 @@
+import{createFixtureBusinessRecord,fixtureCreationData}from'./record-creation-fixtures.mjs';
 import assert from 'node:assert/strict';
 import {doc,getDoc,updateDoc,setDoc,deleteDoc} from 'firebase/firestore';
 import {client,suffix,barcode,snapshot,close,scope} from './access-test-client.mjs';
 import {warehouseChecks} from './warehouse-qa.mjs';
 const staff=await client('Admin');
 const base={name:'QA product',sku:`REVIEW-${suffix}`,barcode:barcode(),category:'QA',location:'A-01',reorderLevel:2,quantityOnHand:10,reservedQuantity:0,status:'Active',imageDataUrl:''};
-const {id}=await staff.call('save',{kind:'products',data:base});let saved=await snapshot('products',id);
+const {id}=await createFixtureBusinessRecord(staff,'products',fixtureCreationData('products',base));let saved=await snapshot('products',id);
 await staff.call('save',{kind:'products',data:{...saved,name:'Updated'},existing:saved});
 await assert.rejects(()=>staff.call('save',{kind:'products',data:{...saved,name:'Stale'},existing:saved}),/changed/);
-await assert.rejects(()=>staff.call('save',{kind:'products',data:{...base,sku:`OTHER-${suffix}`}}),/already/);
+await assert.rejects(()=>createFixtureBusinessRecord(staff,'products',fixtureCreationData('products',{...base,sku:`OTHER-${suffix}`})),/already/);
 await assert.rejects(()=>staff.call('stock',{productId:id,type:'Issue',quantity:11,reason:'Attempt oversell',reference:'QA'}),/Not enough/);
 const stock={productId:id,type:'Issue',quantity:7,reason:'Concurrent issue',reference:'QA'};
 const issues=await Promise.allSettled([staff.call('stock',stock),staff.call('stock',stock)]);assert.equal(issues.filter(x=>x.status==='fulfilled').length,1);assert.equal((await snapshot('products',id)).quantityOnHand,3);

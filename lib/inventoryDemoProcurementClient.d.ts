@@ -1,0 +1,2 @@
+import type {ProcurementInput,ProcurementOutcome,CreateDraft,ActionDraft} from './inventoryDemoProcurement';
+export function createInventoryDemoProcurementClient(options:{storage:Pick<Storage,'getItem'|'setItem'|'removeItem'>;context:{uid:string;scope:string};command:(action:string,input:ProcurementInput)=>Promise<unknown>;isCurrent:()=>boolean}):{activate:()=>void;dispose:()=>void;pending:()=>ProcurementInput|null;start:(input:CreateDraft|ActionDraft)=>Promise<ProcurementOutcome>;retry:()=>Promise<ProcurementOutcome>;resolve:()=>Promise<ProcurementOutcome>};

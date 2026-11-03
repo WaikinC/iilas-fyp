@@ -9,6 +9,17 @@ const bindings=()=>({ownerId:'scope',analysisId:'analysis',actorUid:'actor',oper
 const access={account:{status:'Approved',active:true},scopeId:'scope',ownerId:'scope',role:'Warehouse',shipmentStatus:'Prepared',stage:'Pre-dispatch',actorUid:'actor',assignedDriverUid:null,type:'Parcel Image',integrityVersion:2};
 const predicted=()=>a.finishParcelAnalysis(a.createRunningParcelAnalysis({...bindings(),model},1000),{state:'Predicted',label:'Damaged',probabilities:[0.2,0.8],confidence:0.8,model,serviceRequestId:op,processingTimeMs:12,totalProcessingTimeMs:20},2000);
 
+test('complete experimental model survives public roundtrip and human review without acceptance',()=>{
+  const experimental={...model,acceptanceSha256:null,evaluationKind:'local-experimental',evaluationManifestSha256:hash};
+  const running=a.createRunningParcelAnalysis({...bindings(),model:experimental},1000);
+  const result=a.finishParcelAnalysis(running,{state:'Predicted',label:'Damaged',probabilities:[0.2,0.8],confidence:0.8,model:experimental,serviceRequestId:op,processingTimeMs:12,totalProcessingTimeMs:20},2000);
+  const reviewed=a.reviewParcelAnalysis(result,{analysisId:'analysis',version:2,decision:'Accepted',notes:'Visible face inspected'},{reviewerUid:'admin',role:'Admin',nowMs:3000});
+  assert.deepEqual(a.toPublicParcelAnalysis(JSON.parse(JSON.stringify(reviewed))).model,experimental);
+  for(const patch of [{evaluationKind:null},{evaluationManifestSha256:null},{acceptanceSha256:hash},{evaluationKind:undefined}])assert.throws(()=>a.createRunningParcelAnalysis({...bindings(),model:{...experimental,...patch}},1000));
+  assert.throws(()=>a.createRunningParcelAnalysis({...bindings(),model:{...model,evaluationManifestSha256:hash}},1000));
+  for(const patch of [{evaluationOnly:true},{runtimeMode:'local-evaluation'},{operationally_approved:false}])assert.throws(()=>a.createRunningParcelAnalysis({...bindings(),model:{...model,...patch}},1000));
+});
+
 test('start only accepts evidence and a UUID v4, never caller-owned outcome or scope',()=>{
   assert.deepEqual(a.validateStartParcelAnalysis({evidenceId:'evidence',operationId:op}),{evidenceId:'evidence',operationId:op});
   for(const value of [null,[],{evidenceId:'../file',operationId:op},{evidenceId:'evidence',operationId:'123'}, {evidenceId:'evidence',operationId:op,ownerId:'scope'},{evidenceId:'evidence',operationId:op,label:'Normal'}])assert.throws(()=>a.validateStartParcelAnalysis(value));
@@ -18,6 +29,11 @@ test('resolve and review reject stale/coerced versions, missing notes and extra 
   assert.throws(()=>a.validateResolveParcelAnalysis({analysisId:'analysis',nonce:'private'}));
   assert.deepEqual(a.validateParcelAnalysisReview({analysisId:'analysis',version:2,decision:'Reviewed',notes:'Needs physical inspection'}),{analysisId:'analysis',version:2,decision:'Reviewed',notes:'Needs physical inspection'});
   for(const input of [{version:'2'},{version:0},{notes:''},{decision:'Normal'},{label:'Normal'}])assert.throws(()=>a.validateParcelAnalysisReview({analysisId:'analysis',version:2,decision:'Reviewed',notes:'Inspect parcel',...input}));
+});
+test('cleanup accepts only an analysis ID and optional strict pending UUID without caller authority fields',()=>{
+  assert.deepEqual(a.validateCleanupParcelAnalysis({analysisId:'analysis'}),{analysisId:'analysis'});assert.deepEqual(a.validateCleanupParcelAnalysis({analysisId:'analysis',pendingOperationId:op}),{analysisId:'analysis',pendingOperationId:op});
+  for(const patch of [{pendingOperationId:undefined},{pendingOperationId:'invalid'},{pendingOperationId:1},{evaluationKind:'local-experimental'},{ownerId:'scope'}])assert.throws(()=>a.validateCleanupParcelAnalysis({analysisId:'analysis',...patch}));
+  let accessed=false;const getter={analysisId:'analysis'};Object.defineProperty(getter,'pendingOperationId',{get(){accessed=true;return op;},enumerable:true});assert.throws(()=>a.validateCleanupParcelAnalysis(getter));assert.equal(accessed,false);
 });
 test('new analysis uses current stage matrix while approved historical readers retain access',()=>{
   assert.equal(a.canStartParcelAnalysis(access),true);

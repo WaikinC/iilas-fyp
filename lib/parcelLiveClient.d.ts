@@ -10,6 +10,7 @@ export interface ParcelLiveCommand {
   (name:'reserveParcelLiveFrame',input:ParcelLiveReserveInput):Promise<ParcelLiveFramePublic>;
   (name:'analyseParcelLiveFrame',input:ParcelLiveAnalyseInput):Promise<ParcelLiveFramePublic>;
   (name:'resolveParcelLiveSession'|'stopParcelLiveSession',input:ParcelLiveSessionInput):Promise<ParcelLiveSessionPublic>;
+  (name:'cleanupParcelLiveSession',input:ParcelLiveSessionInput):Promise<{released:boolean}>;
   (name:'resolveParcelLiveFrame',input:ParcelLiveFrameInput):Promise<ParcelLiveFramePublic>;
   (name:'reviewParcelLiveFrame',input:ParcelLiveReviewInput):Promise<ParcelLiveFramePublic>;
 }
@@ -29,6 +30,8 @@ export interface ParcelLiveClient {
   /** Explicit only: unknown session replays original start; known IDs resolve. */
   recover():Promise<ParcelLiveRecovery>;
   stopSaved():Promise<ParcelLiveRecovery>;
+  /** Explicit null cleanup. No old DTO is returned; false ack retains intent. */
+  cleanup(record:ParcelLiveSessionPublic):Promise<{released:boolean}>;
   review(frame:ParcelLiveFramePublic,input:Omit<ParcelLiveReviewInput,'sessionId'|'frameId'|'version'>):Promise<ParcelLiveFramePublic>;
   /** Invalidates late work even when context subsequently changes back. */
   setContext(context:ParcelLiveClientContext):void;

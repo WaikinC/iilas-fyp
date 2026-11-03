@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import {readFile,writeFile,mkdir,readdir,lstat} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
+import {createRequire} from 'node:module';
+import {join} from 'node:path';
+import {initializeApp as initialiseClient,deleteApp as deleteClient} from 'firebase/app';
+import {getAuth as clientAuth,setPersistence,inMemoryPersistence,signInWithCustomToken,signOut} from 'firebase/auth';
+import {readSparkPreparation} from './prepare-spark-msi.mjs';
+import {readSparkPrivate,sparkHash,sparkSourcePath,SPARK_ROOT} from './spark-private-files.mjs';
+import {readSparkCredential} from './spark-activation.mjs';
+import {createSparkTransport} from '../lib/sparkTransport.js';
+import {validateCloudScenarioApproval,validateCloudFixtureDelta,runCloudStockWorkflow,runCloudDeliveryWorkflow,runCloudProofWorkflow} from './spark-cloud-scenarios.mjs';
+import {sparkCloudInventory as inventory,sealSparkCloudFixtureRegistry} from './spark-cloud-cleanup.mjs';
+const fail=()=>{throw Error('Actual cloud acceptance requires its approved actors, activated runtime, source pins and preserved original data.');};
+export async function journalSparkCloudCommand({state,persist,actorUid,action,input,invoke}){
+ if(!Array.isArray(state?.commands)||state.commands.length>=200||typeof persist!=='function'||typeof invoke!=='function'||typeof actorUid!=='string'||!/^[-A-Za-z0-9_]{1,80}$/.test(action))fail();
+ const wire=JSON.parse(JSON.stringify(input));if(Buffer.byteLength(JSON.stringify(wire))>131072)fail();
+ const command={sequence:state.commands.length+1,actorUid,action,input:wire,state:'Issued',issuedAt:new Date().toISOString()};state.commands.push(command);await persist();
+ try{const result=await invoke(action,wire);command.state='Replied';command.repliedAt=new Date().toISOString();await persist();return result;}
+ catch(error){command.state='Unconfirmed';command.errorCode=typeof error.code==='string'&&/^[-a-z/]{1,80}$/.test(error.code)?error.code:null;await persist();throw error;}
+}
+export async function runSparkCloudAcceptance({preparationPath,participantsPath,approvalPath,runId,outputRoot}){
+ const loaded=await readSparkPreparation(preparationPath);if(loaded.receipt.testMode||!loaded.activation||loaded.profile.mode!=='spark-msi')fail();const participants=JSON.parse(await readSparkPrivate(participantsPath)),preparationSha256=sparkHash(await readSparkPrivate(preparationPath)),approval=JSON.parse(await readSparkPrivate(approvalPath));validateCloudScenarioApproval(approval,{runId,preparationSha256,participants});
+ const credential=await readSparkCredential(loaded.serverConfig.credentialPath,loaded.serverConfig.credentialSha256),require=createRequire(new URL('../backend/functions/package.json',import.meta.url)),adminSDK=require('firebase-admin/app'),{getAuth}=require('firebase-admin/auth'),{getFirestore}=require('firebase-admin/firestore');
+ if(Object.keys(process.env).some(k=>k.includes('EMULATOR')))fail();const app=adminSDK.initializeApp({projectId:loaded.profile.projectId,credential:adminSDK.cert(credential)},'cloud-acceptance-'+runId),identity=getAuth(app),db=getFirestore(app),clients=[];
+ const output=sparkSourcePath(outputRoot);if(!output.startsWith(join(SPARK_ROOT,'outputs','spark-msi-demo-20261028')+'\\')&&!output.startsWith(join(SPARK_ROOT,'outputs','spark-msi-demo-20261028')+'/'))fail();await mkdir(output,{recursive:false});let seq=0,before,failure;
+ const state={schema:'iilas-cloud-acceptance-journal-1.0',runId,preparationSha256,runTag:'CLOUD-'+runId.slice(0,8),scope:participants[0].uid,secondUid:participants[1].uid,recordIds:[],recordPaths:[],operationIds:[],retainedPaths:[],commands:[],checks:[],results:{},startedAt:new Date().toISOString()};
+ const save=async()=>{await writeFile(join(output,'journal-'+String(++seq).padStart(4,'0')+'.private.json'),JSON.stringify(state,null,2),{flag:'wx',mode:0o600,flush:true});};
+ const ledger={runTag:state.runTag,operation:async()=>{const id=randomUUID();state.operationIds.push(id);await save();return id;},created:async(kind,id)=>{if(!/^[-A-Za-z0-9_]{1,128}$/.test(id)||before&&Object.hasOwn(before.hashes,kind+'/'+id))fail();if(!state.recordIds.includes(id))state.recordIds.push(id);if(!state.recordPaths.includes(kind+'/'+id))state.recordPaths.push(kind+'/'+id);await save();},check:async(name,work)=>{await work();state.checks.push({name,passed:true,at:new Date().toISOString()});await save();}};
+ async function actor(p){const user=await identity.getUser(p.uid);if(user.disabled||!user.emailVerified||user.email?.toLowerCase()!==p.email?.toLowerCase()||!['choongkin6@gmail.com','wakkin666@gmail.com'].includes(user.email?.toLowerCase()))fail();const options=JSON.parse(await readFile(join(SPARK_ROOT,'firebase-config.json')));if(options.projectId!==loaded.profile.projectId)fail();const client=initialiseClient(options,'cloud-'+runId+'-'+p.uid);clients.push(client);const auth=clientAuth(client);await setPersistence(auth,inMemoryPersistence);await signInWithCustomToken(auth,await identity.createCustomToken(p.uid));if(auth.currentUser.uid!==p.uid||!auth.currentUser.emailVerified)fail();const transport=createSparkTransport({profile:loaded.profile,auth});return {uid:p.uid,transport,call:(action,input)=>journalSparkCloudCommand({state,persist:save,actorUid:p.uid,action,input,invoke:transport.command})};}
+ const record=async(kind,id)=>{const s=await db.doc(kind+'/'+id).get();if(!s.exists)fail();return s.data();};
+ async function verifyNative(kind,row){
+  const root=join(SPARK_ROOT,'research/datasets',kind==='stock'?'inventory-context-serving-v2':'delivery-demo-serving-v1','requests'),entries=await readdir(root,{withFileTypes:true}),matches=[];if(entries.length>2000)fail();
+  for(const e of entries){if(!e.isDirectory())continue;const directory=join(root,e.name);if((await lstat(directory)).isSymbolicLink())fail();try{const req=JSON.parse(await readFile(join(directory,'request.json')));if(req.requestId===row.prediction.requestId)matches.push(directory);}catch(error){if(error.code!=='ENOENT')throw error;}}
+  assert.equal(matches.length,1);const raw=JSON.parse(await readFile(join(matches[0],'prediction.json'))),cleanup=JSON.parse(await readFile(join(matches[0],'inference.result.json')));assert.equal(cleanup.cleanup_confirmed,true);const {totalProcessingTimeMs:rawTime,...native}=raw,{totalProcessingTimeMs:serviceTime,...stored}=row.prediction;assert.deepEqual(stored,native);assert(serviceTime>=rawTime);
+ }
+ try{
+  const configuration=await record('system','config'),adminProfile=await record('users',participants[0].uid),managerProfile=await record('users',participants[1].uid);if(configuration.primaryAdminUid!==participants[0].uid||configuration.dataScopeId!==participants[0].uid||adminProfile.role!=='Admin'||managerProfile.role!=='Manager'||![adminProfile,managerProfile].every(p=>p.status==='Approved'&&p.active))fail();
+  before=await inventory(db);await writeFile(join(output,'before-fingerprints.private.json'),JSON.stringify(before.hashes),{flag:'wx',mode:0o600});const admin=await actor(participants[0]),manager=await actor(participants[1]);await save();
+  async function setSecondRole(role){if(!['Manager','Driver','Customer'].includes(role))fail();const old=await record('users',manager.uid);if(old.role===role)return;if(!old.active||old.status!=='Approved')fail();const version=old.version+1;for(const path of ['users/'+manager.uid,'auditLogs/users_'+manager.uid+'_'+version])if(!state.retainedPaths.includes(path))state.retainedPaths.push(path);await save();await admin.call('updateAccount',{uid:manager.uid,version:old.version,step:'Update',role,displayName:old.displayName});const current=await record('users',manager.uid);if(current.role!==role||current.version!==version)fail();}
+  const context={admin,manager,record,ledger,verifyNative,setSecondRole};state.results.stock=await runCloudStockWorkflow(context);await save();state.results.delivery=await runCloudDeliveryWorkflow(context);await save();state.results.proof=await runCloudProofWorkflow({...context,shipmentId:state.results.delivery.shipmentId});await save();
+  const after=await inventory(db);validateCloudFixtureDelta({before:before.hashes,after:after.hashes,records:after.rows,intent:state});state.fixturePins=sealSparkCloudFixtureRegistry({before:before.hashes,current:after,intent:state});const restored=await record('users',manager.uid);assert.equal(restored.role,'Manager');assert.equal(restored.active,true);
+  state.pending=['ManualMsiWalletRegistrationAndIntegrityVerification','ActualBrowserDesktopAndNarrowChecks','RemoteLaptopAcceptance','ApprovedOwnedFixtureCleanup'];await save();
+ }catch(error){failure=error;state.failed=true;state.errorCode=typeof error.code==='string'?error.code:null;await save();}
+ finally{for(const client of clients){await signOut(clientAuth(client)).catch(()=>{});await deleteClient(client);}await adminSDK.deleteApp(app);}
+ const journalPath=join(output,'journal-'+String(seq).padStart(4,'0')+'.private.json'),baselinePath=join(output,'before-fingerprints.private.json');
+ const receipt={schema:'iilas-cloud-software-acceptance-1.0',passed:false,softwareStepsPassed:!failure,checks:state.checks,results:state.results,pending:state.pending||['InvestigateFailedCloudScenario'],originalRecordsPreservationVerified:!failure,fixtureCleanupComplete:false,manualWalletVerified:false,remoteLaptopVerified:false,billingChanged:false,preparationSha256,runId,output,journal:{path:journalPath,sha256:sparkHash(await readFile(journalPath))},baseline:before?{path:baselinePath,sha256:sparkHash(await readFile(baselinePath))}:null};await writeFile(join(output,'acceptance.private.json'),JSON.stringify(receipt,null,2),{flag:'wx',mode:0o600});return receipt;
+}

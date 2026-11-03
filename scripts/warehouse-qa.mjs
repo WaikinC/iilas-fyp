@@ -1,7 +1,8 @@
+import{createFixtureBusinessRecord,fixtureCreationData}from'./record-creation-fixtures.mjs';
 import assert from 'node:assert/strict';
 import {doc,updateDoc} from 'firebase/firestore';
 export async function warehouseChecks(staff,productId,reference,snapshot){
-  const {id}=await staff.call('save',{kind:'shipments',data:{reference,recipient:'Warehouse receiver',phone:'0123456789',address:'Warehouse QA address',expectedDelivery:'2026-10-09',driver:'',handoverReference:'',packed:false,status:'Draft',parcelCount:1,items:[{productId,quantity:1}]}});
+  const {id}=await createFixtureBusinessRecord(staff,'shipments',fixtureCreationData('shipments',{reference,recipient:'Warehouse receiver',phone:'0123456789',address:'Warehouse QA address',expectedDelivery:'2099-12-01',driver:'',handoverReference:'',packed:false,status:'Draft',parcelCount:1,items:[{productId,quantity:1}]}));
   const step=(stage,version)=>staff.call('warehouse',{shipmentId:id,version,data:{step:stage,notes:'Warehouse QA validation',parcelCount:1}});
   await assert.rejects(()=>step('HandedOver',0),/in order/);
   await step('Picking',0);

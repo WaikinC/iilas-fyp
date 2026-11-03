@@ -25,6 +25,31 @@ ROOT = Path(__file__).resolve().parents[1]
 IMAGE = base64.b64encode(b"tiny encoded image fixture").decode()
 
 
+def publish_fixture_marker(marker, value):
+    # exists() must never expose an empty/partial PID packet to the async reader.
+    marker=Path(marker)
+    staged=marker.with_suffix(marker.suffix+'.partial')
+    staged.write_text(json.dumps(value))
+    os.replace(staged,marker)
+
+
+class FixturePublicationTests(unittest.TestCase):
+    def test_pid_marker_is_published_only_after_complete_json_write(self):
+        with tempfile.TemporaryDirectory() as temp:
+            marker=Path(temp)/'worker.pid.json'
+            original=Path.write_text
+            for old in (None, {'worker':1}):
+                if old is not None:original(marker,json.dumps(old))
+                def staged_write(path,text,*args,**kwargs):
+                    self.assertNotEqual(path,marker,'Reader-visible PID file must not be truncated')
+                    if old is None:self.assertFalse(marker.exists())
+                    else:self.assertEqual(json.loads(marker.read_text()),old)
+                    return original(path,text,*args,**kwargs)
+                with patch.object(Path,'write_text',staged_write):
+                    publish_fixture_marker(marker,{'worker':2,'manager':3})
+                self.assertEqual(json.loads(marker.read_text()),{'worker':2,'manager':3})
+
+
 def alive(pid):
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.OpenProcess.restype = ctypes.c_void_p
@@ -79,7 +104,7 @@ def fixture_manager():
         def checked_release(self, *args):
             recorded = json.loads(Path(marker).read_text())
             recorded["child_alive_at_mutex_release"] = alive(recorded["child"])
-            Path(marker).write_text(json.dumps(recorded))
+            publish_fixture_marker(marker, recorded)
             return release(self, *args)
         runtime._Mutex.__exit__ = checked_release
     runtime.manage(Path(directory), worker_command=lambda path: [
@@ -98,8 +123,8 @@ def fixture_worker():
     if scenario == "rss":
         allocation = bytearray(140 * 1024**2)
         time.sleep(60)
-    marker.write_text(json.dumps(dict(manager=os.getppid(), worker=os.getpid(),
-                                     child=child.pid if child else None)))
+    publish_fixture_marker(marker, dict(manager=os.getppid(), worker=os.getpid(),
+                                       child=child.pid if child else None))
     if scenario == "crash":
         kernel = ctypes.WinDLL("kernel32")
         kernel.OpenProcess.restype = ctypes.c_void_p

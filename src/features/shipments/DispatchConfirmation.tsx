@@ -1,0 +1,9 @@
+import {useState} from 'react';
+import ShipmentDialog from './ShipmentDialog';
+import {ShipmentItems} from './ShipmentDetail';
+import {shipmentText as text,type ShipmentRow,type ShipmentInput} from './shipmentPresentation';
+export type DispatchSnapshot={shipment:ShipmentRow;plan:ShipmentRow;input:ShipmentInput;planRevision:number};
+export default function DispatchConfirmation({snapshot:s,busy,stale,error,onConfirm,onClose}:{snapshot:DispatchSnapshot;busy:boolean;stale:boolean;error:string;onConfirm:()=>void;onClose:()=>void}){
+ const [checked,setChecked]=useState(false);
+ return <ShipmentDialog title="Confirm dispatch" onClose={onClose} busy={busy}><h3>{text(s.shipment.reference)}</h3><p>{s.input.address} · {s.input.expectedDelivery}</p><dl className="shipment-facts"><div><dt>Handover reference</dt><dd>{s.input.handoverReference}</dd></div><div><dt>Driver / vehicle</dt><dd>{text(s.plan.driverName)} / {text(s.plan.vehicleName)||text(s.plan.vehicleId)}</dd></div><div><dt>Parcels</dt><dd>{s.input.parcelCount}</dd></div></dl><ShipmentItems items={s.input.items}/><p>Dispatch deducts the shipment stock once and consumes its held warehouse allocations. Current stock and resource availability are checked by the server.</p>{(stale||error)&&<p role="alert" className="shipment-notice error">{error||'The captured source changed or is unavailable. Close and review current records before dispatch.'}</p>}<label className="shipment-check"><input type="checkbox" checked={checked} disabled={busy||stale} onChange={e=>setChecked(e.target.checked)}/>I have checked this shipment and its recorded transport.</label><footer><button disabled={busy} onClick={onClose}>Back to shipment</button><button className="shipment-primary" disabled={busy||stale||!checked} onClick={onConfirm}>{busy?'Dispatching…':'Dispatch shipment'}</button></footer></ShipmentDialog>;
+}

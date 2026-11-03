@@ -1,0 +1,14 @@
+{
+  "notice": "Blank non-executable worksheet. Actual generated configuration stays ignored; review resources and authorise cloud actions separately.",
+  "newProjectId": "",
+  "functionsAndFirestoreRegion": "",
+  "storageLocation": "",
+  "gatewayProvider": "",
+  "gatewayHttpsOrigin": "",
+  "billingAuthorised": false,
+  "publicTunnelAuthorised": false,
+  "deploymentAuthorised": false,
+  "importExistingEmulatorSnapshot": false,
+  "parcelTestingPaused": true,
+  "actualPhoneAcceptance": "pending"
+}

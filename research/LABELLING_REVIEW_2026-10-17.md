@@ -1,5 +1,9 @@
 # Report alignment and public dataset collection
 
+## Later inventory decision — 23 October 2026
+
+The user has now authorised simulated inventory data. The [new protocol](INVENTORY_SIMULATION_AND_LABELLING_2026-10-23.md) uses Wong's permission for carefully prepared scenarios while preserving reviewed three-class evidence, simulated provenance and separate grouped evaluation. Earlier public-only wording below records the 17 October decision and no longer excludes this inventory simulation scope. The protocol is written only: no new data, labels, training or operational model acceptance is claimed. Public benchmarks remain separate; parcel camera and delivery work are deferred.
+
 Reviewed on MSI on 17 October 2026. The user selected **public datasets only for now**. This review preserves the three report-required models and defers all additional features. Public benchmark results must remain separate from claims about the deployed IILAS tasks.
 
 ## Report evidence and labelling decisions

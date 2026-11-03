@@ -13,17 +13,21 @@ export const PARCEL_ANALYSIS_LEASE_MS:90000;
 export function parcelAnalysisReasonMessage(code:unknown):string;
 
 /** Shape validation never supplies scientific model acceptance. The trusted
- * backend must obtain its pin from parcelAcceptance.mjs and validate responses. */
-export interface ParcelAnalysisModel {
+ * backend must select its operational pin or trusted local evaluation capability
+ * and validate the corresponding response branch. */
+export interface ParcelAnalysisModelBase {
   model:'MobileNetV2';
   modelVersion:string;
   selectionSha256:string;
   evaluationSha256:string;
-  acceptanceSha256:string;
   preprocessing:string;
   contrast:'none'|'clahe';
   classOrder:['Normal','Damaged'];
 }
+export type ParcelAnalysisModel=ParcelAnalysisModelBase & (
+  {acceptanceSha256:string;evaluationKind?:never;evaluationManifestSha256?:never} |
+  {acceptanceSha256:null;evaluationKind:'local-experimental';evaluationManifestSha256:string}
+);
 export interface ParcelAnalysisBindings {
   ownerId:string;
   analysisId:string;
@@ -66,9 +70,11 @@ export interface ParcelAnalysisPublic extends ParcelAnalysisBindings {
 }
 export interface ParcelAnalysisStartInput {evidenceId:string;operationId:string;}
 export interface ParcelAnalysisResolveInput {analysisId:string;}
+export interface ParcelAnalysisCleanupInput extends ParcelAnalysisResolveInput {pendingOperationId?:string;}
 export interface ParcelAnalysisReviewInput {analysisId:string;version:number;decision:ParcelAnalysisReviewDecision;notes:string;}
 export function validateStartParcelAnalysis(input:unknown):ParcelAnalysisStartInput;
 export function validateResolveParcelAnalysis(input:unknown):ParcelAnalysisResolveInput;
+export function validateCleanupParcelAnalysis(input:unknown):ParcelAnalysisCleanupInput;
 export function validateParcelAnalysisReview(input:unknown):ParcelAnalysisReviewInput;
 export interface ParcelAnalysisReadPolicy {
   account?:{status?:string;active?:boolean}|null;

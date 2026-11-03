@@ -1,6 +1,18 @@
 # Parcel acceptance decisions and camera pilot — 22 October 2026
 
-Status: the full photo/live goal remains incomplete and blocked on evaluation inputs. No new acceptance criteria have been adopted, no local camera capture is authorised, and no application admission code or pin changes follow from this document.
+## Latest decision: integrate now, real camera later
+
+Local software integration is now verified through an actual registered exposed-VALID photo, frozen MobileNetV2, Firebase emulator and browser result. The user's physical-camera test remains deferred and is not a local software readiness prerequisite. No new owned-box capture occurred. Functional verification preserves false operational approval/null acceptance and does not establish real-camera or independent intended-use accuracy. Keep the full scientific acceptance goal incomplete, source benchmark unchanged and other AI models/features deferred. See ../docs/PARCEL_LOCAL_TEST_GUIDE_2026-10-22.md for the dedicated local test shipment and later deliberate steps.
+
+## Application-only GitHub checkpoint — 22 October 2026
+
+User requested the application be pushed without the unfinished local camera integration. Private WaikinC/iilas-fyp main now points to 3a07f4017323a222859476780e6b926d74f762eb (normal fast-forward; remote verified). The four new local-evaluation Python modules/tests and local design/plan were excluded and remain on MSI. Task1 has scoped review PASS, but Task2 backend/UI integration is preparation only and no experimental service, emulator or physical camera was started. Preserve this pending local work; do not claim camera readiness. Build passes and lint has zero errors/six warnings; credential scans pass. The broader research run has native runtime test failures whose cause remains unresolved, so do not claim the complete research suite green. See docs/OTHER_LAPTOP_DEVELOPMENT.md in the application for clone/development instructions. Datasets, weights, captures, private configuration, exports and the outer report/private bundle were not published. Earlier complete-photo/live scientific requirements remain outstanding.
+
+## Latest human direction: local prototype testing — 22 October 2026
+
+User selected Local IILAS on MSI with Firebase emulators for the proposed existing-interface/frozen-MobileNetV2/human-reviewed experimental result flow, then explicitly requested continued local integration and notification when the in-app parcel camera is ready. This approves controlled user-initiated local photo/camera functional tests and supersedes earlier camera deferral for that scope. It does not accept operational model quality, alter training/public-data choices or permit production writes. Additive implementation is in progress; the camera is not yet verified ready. The operational gates/pins and frozen source benchmark remain unchanged. See ../docs/PARCEL_LOCAL_EVALUATION_2026-10-22.md.
+
+Current status: the full photo/live goal remains incomplete. The later local-prototype instruction above authorises controlled user-initiated functional photo/camera tests, and the local integration is in implementation/review. Scientific acceptance criteria, independent intended-use quality and actual device evidence remain unresolved; operational pins stay closed. Earlier public-only/camera-deferred restrictions below are preserved history and do not override that later bounded authorisation.
 
 ## Confirmed collection decision — 22 October 2026
 

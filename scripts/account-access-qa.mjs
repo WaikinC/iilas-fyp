@@ -1,3 +1,4 @@
+import{createFixtureBusinessRecord,fixtureCreationData}from'./record-creation-fixtures.mjs';
 import assert from 'node:assert/strict';
 import {doc,getDoc,getDocs,collection,setDoc,updateDoc} from 'firebase/firestore';
 import {admin,client,suffix,barcode,fixtureDB,snapshot,close} from './access-test-client.mjs';
@@ -24,7 +25,7 @@ for(const action of ['createWorkspace','join','invite','memberUpdate'])await ass
 const saved=await snapshot('users',pending.uid);
 await admin.call('updateAccount',{uid:pending.uid,version:saved.version,step:'Approve',role:'Inventory'});
 const data={name:'Preserved shared stock',sku:`ACCESS-${suffix}`,barcode:barcode(),category:'QA',location:'A-01',reorderLevel:2,quantityOnHand:19,reservedQuantity:0,status:'Active',imageDataUrl:''};
-const product=await admin.call('save',{kind:'products',data});
+const product=await createFixtureBusinessRecord(admin,'products',fixtureCreationData('products',data));
 assert.equal((await snapshot('products',product.id,pending)).quantityOnHand,19);
 await denied(()=>getDoc(doc(pending.db,'products',legacyId))); // Approval does not merge personal stock.
 await denied(()=>pending.call('stock',{productId:product.id,type:'Receipt',quantity:1,reference:'QA',reason:'Foreign scope attempt'},pending.uid));
@@ -41,5 +42,5 @@ await pending.call('stock',{productId:product.id,type:'Receipt',quantity:1,refer
 assert.equal((await snapshot('products',product.id)).quantityOnHand,20);
 const rejected=await client('Rejected',false);await admin.call('updateAccount',{uid:rejected.uid,version:1,step:'Reject'});
 await rejected.call('registerAccount');assert.equal((await snapshot('users',rejected.uid,rejected)).status,'Rejected');
-await denied(()=>rejected.call('save',{kind:'products',data}));
+await denied(()=>createFixtureBusinessRecord(rejected,'products',fixtureCreationData('products',data)));
 await close();console.log('Account QA passed: pending access, impersonation/escalation denial, Admin approval, roles, disable/reactivate, rejection, fixed scope and preserved stock.');

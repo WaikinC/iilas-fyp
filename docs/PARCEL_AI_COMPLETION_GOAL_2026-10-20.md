@@ -1,5 +1,31 @@
 # Parcel AI completion goal — 20 October 2026
 
+## Live transport follow-up verified; external evaluation still required — 22 October 2026
+
+Actual sampled-live transport now passes with the frozen model and an explicitly simulated frame made from the same previously exposed VALID public JPEG: real session/reservation/inference, retained bytes, identical replay, explicit stop and historical resolution. Normal was returned in11.742seconds of callable time (service10.980s/model346.6ms), without a camera or independent accuracy measurement. Temporary fixtures were removed, the existing local handoff remained exact, and original native cleanup was observed. The completion audit identifies no further justified core software task under the current scope. Physical-device/camera and independent intended-use quality/prospective admission remain deferred and unfulfilled; the full goal remains incomplete. No further known-image repeat, speculative feature, training or TEST replay closes those gaps.
+
+## Local integration complete; full evaluation still pending — 22 October 2026
+
+The user selected software integration now and real-camera testing later. Actual local app/Functions/frozen-model photo inference passed, including persisted Normal, review/reload, explicit experimental provenance and operational-consumer exclusion. Click-to-result was12.927seconds for one exposed VALID photo; it supplies no independent accuracy estimate. Actual browser recovery and required sequential emulator regressions passed; native worker/Job cleanup and protected source preservation were observed. The dedicated local test shipment is LOCAL-PARCEL-CAMERA-539139D3. See PARCEL_LOCAL_TEST_GUIDE_2026-10-22.md and the latest MSI setup status.
+
+The full goal remains incomplete because physical-camera/device and independent intended-use quality evidence are deferred/missing. No new dataset review, training or TEST replay is needed before the user's later functional camera trial. Both operational acceptance pins remain closed; local results are experimental and excluded from operational decisions. Integration changes stay local and unpushed.
+
+## Local integration review and remaining evidence — 22 October 2026
+
+Current published application main is `25680a2b991b797f5aad3e79ae5cfcca0b4aec00`. New experimental photo/camera integration stays local and unstaged under the user's publication exclusion. The Python local service/manifest passed scoped review. Backend/UI checks passed388 pure tests and17 photo/29 live synthetic browser groups before independent review identified two recovery/partial-marker issues; the scoped fixes and re-review are underway. A positive real model-to-Firebase-to-browser result and physical-camera readiness are not yet established.
+
+Affected native infrastructure now passes40 cold and27 warm tests under unchanged limits with sufficient RAM. The original warm failures were memory admission rejections; original cold causes remain unproven. Neither that revalidation nor the source benchmark establishes camera accuracy. Keep the frozen90.67% publisher-source result separate from intended-use quality. No training, TEST replay, operational pin change, production activity or additional-feature work follows.
+
+The authorised next sequence is recovery-fix review, one-stack sequential emulator regressions, a real frozen-model registered-photo/browser test, then the user's deliberate camera test. Do not repeat dataset reviews as a prerequisite to this functional test. The [local test guide](PARCEL_LOCAL_TEST_GUIDE_2026-10-22.md) is preparation only until actual readiness is verified.
+
+## Application-only GitHub checkpoint — 22 October 2026
+
+User requested the application be pushed without the unfinished local camera integration. Private WaikinC/iilas-fyp main now points to 3a07f4017323a222859476780e6b926d74f762eb (normal fast-forward; remote verified). The four new local-evaluation Python modules/tests and local design/plan were excluded and remain on MSI. Task1 has scoped review PASS, but Task2 backend/UI integration is preparation only and no experimental service, emulator or physical camera was started. Preserve this pending local work; do not claim camera readiness. Build passes and lint has zero errors/six warnings; credential scans pass. The broader research run has native runtime test failures whose cause remains unresolved, so do not claim the complete research suite green. See docs/OTHER_LAPTOP_DEVELOPMENT.md in the application for clone/development instructions. Datasets, weights, captures, private configuration, exports and the outer report/private bundle were not published. Earlier complete-photo/live scientific requirements remain outstanding.
+
+## Local functional test direction — 22 October 2026
+
+The latest user selection authorises local MSI/Firebase emulator integration and user-initiated photo/camera testing through the existing interface. See PARCEL_LOCAL_EVALUATION_2026-10-22.md and its implementation plan. Earlier camera-deferred/public-only restrictions are superseded for these controlled functional captures only. The full parcel goal remains incomplete and active; scientific acceptance and real-device evidence are separate from enabling an honestly experimental prototype. Both operational pins remain null; do not repeat dataset reviews as a prerequisite to this local test.
+
 ## User collection decision — 22 October 2026
 
 Confirmed response: **Keep public datasets only; leave camera evaluation pending.** This supersedes older statements below that the pilot choice is unanswered. The owned-box pilot is not approved; no new owned-box stills or physical-camera sessions may be collected. Further authorised work focuses on public-photo qualification, evaluation and eventual evidence-qualified photo integration. The original full photo/live goal remains incomplete; deferred camera evidence is not waived. Relevant independent photo data and prospective acceptance/admission decisions remain unresolved. Keep both operational gates closed until their own evidence/contracts qualify; do not reopen the same pilot question during routine public-photo work.

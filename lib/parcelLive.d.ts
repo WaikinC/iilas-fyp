@@ -61,7 +61,7 @@ export function matchesParcelLiveFrameClaim(claim:unknown,lock:unknown):boolean;
 
 /** Shape validation cannot grant admission; real pin is server-owned null in
  * parcelLiveAcceptance.mjs. Photo descriptors cannot satisfy this shape. */
-export interface ParcelLiveModel {model:'MobileNetV2';modelVersion:string;selectionSha256:string;evaluationSha256:string;acceptanceSha256:string;preprocessing:string;contrast:'none'|'clahe';classOrder:['Normal','Damaged'];intendedUse:'sampled-live';policyVersion:'parcel-live-v1';policySha256:ParcelLivePolicy['sha256'];}
+export type ParcelLiveModel=import('./parcelAnalysis.js').ParcelAnalysisModel & {intendedUse:'sampled-live';policyVersion:'parcel-live-v1';policySha256:ParcelLivePolicy['sha256'];};
 export function toSafeParcelLiveModel(value:null):null;
 export function toSafeParcelLiveModel(value:unknown):ParcelLiveModel|null;
 export interface ParcelLiveBindings {ownerId:string;sessionId:string;actorUid:string;shipmentId:string;stage:EvidenceStage;policy:ParcelLivePolicy;model:ParcelLiveModel|null;}

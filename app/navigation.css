@@ -1,0 +1,3 @@
+.primary-navigation a.nav-item{text-decoration:none;box-sizing:border-box}
+.primary-navigation a.nav-item:focus-visible{outline:3px solid #b9a2ff;outline-offset:-3px}
+.record-page-link{display:inline-flex;align-items:center;min-height:44px;color:#234576;font-weight:600;text-decoration:underline;text-underline-offset:3px}

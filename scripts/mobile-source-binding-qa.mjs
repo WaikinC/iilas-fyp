@@ -1,0 +1,4 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {SOURCE_FILES as stock} from '../backend/functions/inventoryContextAI.mjs';import {SOURCE_FILES as parcel} from '../backend/functions/parcelLocalEvaluation.mjs';import {DELIVERY_SOURCE_FILES as delivery} from '../backend/functions/deliveryDemoAI.mjs';
+const required=['lib/mobileDelivery.js','backend/functions/mobileDelivery.js','backend/functions/mobileDelivery.mjs','backend/functions/mobileEvidence.mjs','backend/functions/deliveryWorkflow.mjs','backend/functions/evidenceRegistration.mjs'];
+test('all three serving source inventories bind the mobile transaction seams',()=>{for(const list of [stock,parcel,delivery])for(const file of required)assert(list.includes(file),file+' missing from current source inventory');});

@@ -1,0 +1,16 @@
+import type {ReportCoverage,ReportPage} from './reporting';
+export type StatisticsTab='overview'|'inventory'|'logistics'|'ai';
+export type StatisticsIdentity={uid:string;workspaceId:string;role:string;version:number};
+export type StatisticsRequest={preset:string;filters:Record<string,string>;interval:'day'|'week'};
+export type StatisticsPreset={resource:string;tab:Exclude<StatisticsTab,'overview'>;label:string;currentState:boolean;forcedFilters:Readonly<Record<string,string>>};
+export type StatisticsMetric={key:string;label:string;value:number|null;unit:string;unknownCount:number};
+export type StatisticsDistribution={key:string;label:string;denominator:number;values:{key:string;label:string;count:number}[]};
+export type StatisticsTimeSeries={unit:string;keys:string[];buckets:{day:string;values:Record<string,number>}[]};
+export type StatisticsProductBalance={id:string;sku:string|null;name:string|null;onHand:number|null;reserved:number|null;available:number|null};
+export type StatisticsResult={schema:'iilas-report-statistics-1.0';preset:string;resource:string;filters:Record<string,string>;interval:'day'|'week';observedAtMs:number;coverage:ReportCoverage & {scope:'filtered';complete:true};summary:StatisticsMetric[];distributions:StatisticsDistribution[];timeSeries:StatisticsTimeSeries|null;productBalances:StatisticsProductBalance[];remainingProducts:number;exclusions:{unknownFacts:number;invalidFacts:number;undatedExcluded:boolean;undatedExcludedCount:number|null}};
+export const STATISTICS_PRESETS:Readonly<Record<string,Readonly<StatisticsPreset>>>;
+export function validateStatisticsRequest(raw:unknown):StatisticsRequest;
+export function statisticsSourceRequest(raw:StatisticsRequest):{resource:string;filters:Record<string,string>};
+export function statisticsAllowed(preset:string,role:string):boolean;
+export function statisticsDefaultRequest(preset:string,nowMs?:number):StatisticsRequest;
+export type StatisticsSelection=Pick<ReportPage,'rows'|'coverage'|'observedAtMs'>;

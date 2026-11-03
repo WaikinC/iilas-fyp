@@ -1,5 +1,9 @@
 # Collecting data for the three IILAS AI evaluations
 
+## Inventory simulation authorisation — 23 October 2026
+
+The user explicitly permits simulated data for inventory. Use the [simulation and labelling plan](INVENTORY_SIMULATION_AND_LABELLING_2026-10-23.md) for the separate offline pilot, evidence-backed labels and prospective grouped evaluation. This supersedes the older public-only restriction below only for inventory simulations. No generator/data/training is delivered by that plan; other models and camera testing remain deferred. Keep simulated and real records separate, retain real history/eligibility holds, and never fabricate missing operational inputs. All future simulated rows, dossiers and reviews belong beneath ignored research/datasets/inventory-simulation-v1, not the tracked CSV templates.
+
 This is the Step 2 intake workflow, based on the [evaluation plan](https://docs.google.com/document/d/1fHTr2zE1xBzbWuPpyaDArQaIOYhmJOTVM4fzqoI7QjU/edit). It prepares local observations for later splitting and training. It does not generate labels, infer missing features, download production records, train a model or activate an inference artefact.
 
 ## Start and audit a collection

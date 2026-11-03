@@ -1,0 +1,3 @@
+import type {CompletionInput,CompletionOutcome} from './completionWorkflow.js';
+export type CompletionClient={pending:(action:string)=>CompletionInput|null;start:(action:string,input:Record<string,unknown>)=>Promise<CompletionOutcome>;retry:(action:string)=>Promise<CompletionOutcome>;resolve:(action:string)=>Promise<CompletionOutcome>;activate:()=>void;dispose:()=>void};
+export function createCompletionClient(options:{storage:Pick<Storage,'getItem'|'setItem'|'removeItem'>;context:{uid:string;scope:string;tab:string};command:(action:string,input:CompletionInput)=>Promise<unknown>;isCurrent:()=>boolean;resolveActions:Record<string,string>}):CompletionClient;

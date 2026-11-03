@@ -33,6 +33,14 @@ yarn-error.log*
 .env*
 !**/.env.example
 /firebase-config.json
+/demo-environment.json
+/demo-allowlist.json
+/backend/functions/hybrid-runtime.json
+/backend/functions/demoEnvironment.js
+/backend/functions/hybridGateway.js
+/tools/msi-gateway/private*.json
+/android/app/src/local/assets/
+/android/app/src/cloudDemo/assets/
 
 # vercel
 .vercel
@@ -46,6 +54,8 @@ next-env.d.ts
 /.openai/
 /.agents/
 /.codex/
+/.superpowers/
+/.worktrees/
 /outputs/
 /output/
 /work/
@@ -60,6 +70,10 @@ next-env.d.ts
 /backend/functions/parcelEvidence.js
 /backend/functions/parcelAnalysis.js
 /backend/functions/parcelLive.js
+/backend/functions/inventoryRisk.js
+/backend/functions/deliveryRiskDemo.js
+/backend/functions/inventoryAI.js
+/backend/functions/inventoryContextAI.js
 /research/__pycache__/
 /research/.venv/
 /research/models/
@@ -91,3 +105,30 @@ venv/
 /research/data/*
 !/research/data/inventory-template.csv
 !/research/data/delivery-template.csv
+/backend/functions/inventoryDemoReorder.js
+/backend/functions/inventoryDemoProcurement.js
+backend/functions/completionWorkflow.js
+backend/functions/integrityWorkflow.js
+backend/functions/transportPlanning.js
+backend/functions/accountRoles.js
+backend/functions/reporting.js
+# Local Android runtime/build artefacts; native source remains reviewable.
+backend/functions/mobileDelivery.js
+android/.gradle/
+android/**/build/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor*.json
+android/app/src/main/assets/mobile-local.json
+android/app/src/debug/res/values/mobile-local.xml
+dist/mobile/
+*.apk
+*.aab
+*.jks
+*.keystore
+*.db
+*.db-shm
+*.db-wal
+
+android/.kotlin/
+android/**/.kotlin/

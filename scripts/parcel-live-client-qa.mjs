@@ -17,6 +17,20 @@ const setup=(command=async name=>name==='startParcelLiveSession'?session():termi
 const signal=()=>new AbortController();
 const capture=()=>({payload:{blob:new Blob([new Uint8Array([255,216,255])],{type:'image/jpeg'}),width:3,height:1},bytes:3,capturedAtClient:new Date(now).toISOString()});
 const input=(controller=signal())=>({sessionId:sid,frameId:fid,sequence:1,signal:controller.signal,...capture()});
+
+test('explicit live cleanup acknowledges matching lost-start identity without replaying or starting capture',async()=>{
+ const s=storage(),calls=[];let client=setup(async(name,p)=>{calls.push([name,p]);return session();},s).client;await client.open({operationId:op,signal:signal().signal});client.dispose();
+ client=setup(async(name,p)=>{calls.push([name,p]);return {released:true};},s).client;
+ assert.deepEqual(await client.cleanup(session()),{released:true});assert.equal(client.pending(),null);assert.equal(client.snapshot().session,null);assert.deepEqual(calls,[['startParcelLiveSession',{shipmentId:'shipment',stage:'Pre-dispatch',operationId:op}],['cleanupParcelLiveSession',{sessionId:sid}]]);
+});
+test('live cleanup false/malformed acknowledgement and context replacement retain original intent',async()=>{
+ for(const ack of [{released:false},{released:1},{released:true,model:null},null]){
+  const calls=[],{client}=setup(async(name,p)=>{calls.push([name,p]);return name==='cleanupParcelLiveSession'?ack:session();});await client.open({operationId:op,signal:signal().signal});
+  if(ack?.released===false)assert.deepEqual(await client.cleanup(session()),{released:false});else await assert.rejects(client.cleanup(session()));assert.equal(client.pending().operationId,op);
+  const before=calls.length;await assert.rejects(client.cleanup(session({ownerId:'other'})));assert.equal(calls.length,before);
+ }
+ const gate=defer(),s=storage(),a=setup(async name=>name==='cleanupParcelLiveSession'?gate.promise:session(),s).client;await a.open({operationId:op,signal:signal().signal});const work=a.cleanup(session());a.setContext({...ctx,stage:'Delivery'});a.setContext(ctx);gate.resolve({released:true});await assert.rejects(work);assert.equal(a.pending().operationId,op);
+});
 test('client interface exists before implementation',()=>assert.equal(typeof create,'function'));
 test('write-before-send contains exactly eight identity fields; unavailable never reserves',async()=>{
  const s=storage(),calls=[];const {client}=setup(async name=>{calls.push(name);assert.equal(JSON.parse([...s.data.values()][0]).operationId,op);assert.deepEqual(Object.keys(JSON.parse([...s.data.values()][0])).sort(),['actorUid','blockedSessionId','frameId','operationId','scopeId','sessionId','shipmentId','stage']);return session({state:'Unavailable',model:null,reasonCode:'model-unavailable',stoppedAt:null});},s);

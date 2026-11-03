@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, Box, Bookmark, MapPin, Package, Plus, Search, X } from "lucide-react";
+import {X} from "lucide-react";
+import StockWorkspaceView from "./StockWorkspaceView";
+import type {StockSection} from "./stockWorkspacePresentation";
 import {collection,onSnapshot,query,where} from 'firebase/firestore';
 import {db} from '@/lib/firebase';
 import {getActiveWorkspace} from '@/lib/workspace';
-import {locationBalances,locationKey,correctionMovement} from '@/lib/locationStock';
+import {locationBalances,locationKey} from '@/lib/locationStock';
 import Field from "../../components/FormField";
-import Pagination, {usePagination} from "../../components/Pagination";
+import {usePagination} from "../../components/Pagination";
 import {useDialogFocus} from "../../components/useDialogFocus";
 import { pendingStockMovement, resolveStockMovement, saveStockMovement } from "@/lib/firebase";
+import InventoryRisk from './InventoryRisk';
+import InventoryAIExperiment from './InventoryAIExperiment';
+import type {Membership} from '../workspace/WorkspaceGate';
 
 type RecordData = { id: string; [key: string]: unknown };
 type MovementType = "Receipt" | "Issue" | "Adjustment" | "Reservation" | "Release" | "Transfer";
@@ -25,6 +30,7 @@ type SavedCorrection={productId:string;type:'Correction';correctionOf:string;rea
 type SavedMovement = Omit<MovementForm,"quantity"|"adjustmentDirection"> & {quantity:number;adjustmentDirection:string;operationId:string};
 const savedMovement = () => pendingStockMovement() as SavedMovement | SavedCorrection | null;
 type Props = {
+  member:Membership;
   readOnly?:boolean;
   products: RecordData[];
   movements: RecordData[];
@@ -36,12 +42,15 @@ const value = (input: unknown) => typeof input === "string" ? input : "";
 const number = (input: unknown) => Number(input ?? 0);
 const available = (product: RecordData) => Math.max(0, number(product.quantityOnHand) - number(product.reservedQuantity));
 const movementTypes: MovementType[] = ["Receipt", "Issue", "Adjustment", "Reservation", "Release", "Transfer"];
-const movementIcon = (type: string) => type === "Receipt" ? <ArrowDownToLine size={15}/> : type === "Issue" ? <ArrowUpFromLine size={15}/> : type === "Reservation" || type === "Release" ? <Bookmark size={15}/> : type === "Transfer" ? <MapPin size={15}/> : <Box size={15}/>;
-const timestamp = (input: unknown) => input && typeof input === "object" && "seconds" in input ? new Date(Number((input as {seconds:number}).seconds) * 1000).toLocaleString() : "Pending";
 function locations(product:RecordData):{location:string;quantity:number;reserved:number;warehouse:number}[]{try{return locationBalances(product);}catch{return [];}}
-function eligible(movement:RecordData){try{correctionMovement(movement,'Eligibility check','');return true;}catch{return false;}}
 
-export default function StockManagement({ products, movements, onNotice, onError, readOnly=false }: Props) {
+export default function StockManagement(props:Props){
+ const {member}=props;
+ return <StockManagementBody key={`${member.uid}:${member.workspaceId}:${member.role}:${member.version}`} {...props}/>;
+}
+function StockManagementBody({ member, products, movements, onNotice, onError, readOnly=false }: Props) {
+  const [section,setSection]=useState<StockSection>('balances');
+  const [assessmentSelection,setAssessmentSelection]=useState('');
   const activeProducts = useMemo(() => products.filter(product => product.archived !== true && product.status === "Active"), [products]);
   const [search, setSearch] = useState("");
   const [movementFilter, setMovementFilter] = useState("All movements");
@@ -49,6 +58,8 @@ export default function StockManagement({ products, movements, onNotice, onError
   const scope=getActiveWorkspace()?.workspaceId;
   useEffect(()=>db&&scope?onSnapshot(query(collection(db,'stockCorrectionLinks'),where('ownerId','==',scope)),s=>setCorrectionLinks(s.docs.map(d=>({id:d.id,...d.data()}))),e=>onError(e.message)):undefined,[scope,onError]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [assessmentProduct,setAssessmentProduct]=useState<string|null>(null);
+  const [experimentOpen,setExperimentOpen]=useState(false);
   const filteredProducts = useMemo(() => activeProducts.filter(product => {
     const term = search.trim().toLowerCase();
     return !term || [product.name, product.sku, product.barcode, product.category, product.location, ...locations(product).map(row=>row.location)].some(item => value(item).toLowerCase().includes(term));
@@ -71,36 +82,16 @@ export default function StockManagement({ products, movements, onNotice, onError
   };
 
   const openCorrection=(id:string)=>{try{const pending=savedMovement();if(pending&&pending.type!=='Correction'){openMovement();return;}setCorrection(pending?.type==='Correction'?pending.correctionOf:id);}catch(e){onError(e instanceof Error?e.message:'Unable to open correction.');}};
-  return <div className="stock-page">
-    <div className="stock-heading"><div><h1>Stock Management</h1><p>Record every stock change and keep on-hand, reserved, and available quantities in sync.</p></div><button className="primary green" disabled={readOnly} onClick={() => openMovement()}><Plus size={15}/>Record Movement</button></div>
-    <div className="stock-summary">
-      <StockMetric label="On hand" value={totals.onHand} detail="Physical units recorded"/>
-      <StockMetric label="Reserved" value={totals.reserved} detail="Allocated to future work"/>
-      <StockMetric label="Available" value={totals.available} detail="Usable for dispatch"/>
-      <StockMetric label="Reorder alerts" value={totals.low} detail="At or below reorder level" warning={totals.low > 0}/>
-    </div>
-    <section className="module-card stock-card">
-      <header className="stock-card-header"><div><h2>Inventory balances</h2><p>Available quantity equals on hand minus reserved.</p></div></header>
-      <div className="toolbar"><div className="search"><Search size={15}/><input value={search} aria-label="Search inventory balances" onChange={event => {setSearch(event.target.value);balancesPage.setPage(1);}} placeholder="Search name, SKU, barcode or location…"/></div></div>
-      <div className="table-wrap" role="region" aria-label="Stock records table" tabIndex={0}><table><thead><tr>{["Product","SKU","Location","On hand","Reserved","Available","Reorder level","Status","Action"].map(header => <th key={header} scope="col">{header}</th>)}</tr></thead><tbody>
-        {balancesPage.pageItems.map(product => { const free = available(product); const low = free <= number(product.reorderLevel); const bins=locations(product); return <tr key={product.id}><td><span className="stock-product"><span className="stock-product-image">{value(product.imageDataUrl) ? <img src={value(product.imageDataUrl)} alt=""/> : <Package size={17}/>}</span><b>{value(product.name)}</b></span></td><td className="mono">{value(product.sku)}</td><td><details className="stock-location-list"><summary>{bins.length?`${bins.length} location${bins.length===1?'':'s'}`:'Balance needs review'}</summary>{!bins.length&&<p className="error">Location totals need administrator reconciliation before recording stock.</p>}{bins.map(row=><p key={row.location}><b>{row.location}</b>{locationKey(row.location)===locationKey(String(product.location))?' (default receipt location)':''}<br/>{row.quantity} on hand · {row.reserved} reserved · {row.quantity-row.reserved} available</p>)}</details></td><td>{number(product.quantityOnHand).toLocaleString()}</td><td>{number(product.reservedQuantity).toLocaleString()}</td><td><b>{free.toLocaleString()}</b></td><td>{number(product.reorderLevel).toLocaleString()}</td><td><span className={`stock-level ${low ? "low" : "healthy"}`}>{low ? "Reorder" : "Healthy"}</span></td><td><button className="stock-action" aria-label={`Record movement for ${value(product.name)}`} disabled={readOnly||!bins.length} onClick={() => openMovement(product.id)}>Record</button></td></tr>; })}
-        {filteredProducts.length === 0 && <tr><td className="empty-cell" colSpan={9}>{activeProducts.length ? "No products match the search." : "No active products are available."}</td></tr>}
-      </tbody></table></div><Pagination {...balancesPage} label="active products"/>
-    </section>
-    <section className="module-card stock-card">
-      <header className="stock-card-header"><div><h2>Movement history</h2><p>Immutable movements and approved linked corrections.</p></div><select aria-label="Movement history type" value={movementFilter} onChange={event => {setMovementFilter(event.target.value);movementsPage.setPage(1);}}><option>All movements</option><option>Correction</option>{movementTypes.map(type => <option key={type}>{type}</option>)}</select></header>
-      <div className="table-wrap" role="region" aria-label="Stock records table" tabIndex={0}><table><thead><tr>{["Date","Movement","Product","Quantity","On hand","Reserved","Location","Reference","Reason","Correction"].map(header => <th key={header} scope="col">{header}</th>)}</tr></thead><tbody>
-        {movementsPage.pageItems.map(movement => <tr key={movement.id}><td>{timestamp(movement.createdAt)}</td><td><span className={`movement-type ${value(movement.type).toLowerCase()}`}>{movementIcon(value(movement.type))}{value(movement.type)}</span></td><td><b>{value(movement.productName)}</b><small className="stock-subline mono">{value(movement.sku)}</small></td><td>{number(movement.quantity).toLocaleString()}</td><td>{number(movement.quantityBefore)} → <b>{number(movement.quantityAfter)}</b></td><td>{number(movement.reservedBefore)} → <b>{number(movement.reservedAfter)}</b></td><td>{value(movement.locationFrom) === value(movement.locationTo) ? value(movement.locationTo) : `${value(movement.locationFrom)} → ${value(movement.locationTo)}`}</td><td className="mono">{value(movement.reference) || "—"}</td><td className="stock-reason" title={value(movement.reason)}>{value(movement.reason)}{Boolean(movement.correctionOf)&&<small className="stock-subline">Reverses movement {value(movement.correctionOf)}</small>}</td><td>{movement.correctionOf?'Linked reversal':correctionLinks.find(link=>link.id===movement.id&&link.status!=='Rejected')?<span>{value(correctionLinks.find(link=>link.id===movement.id)!.status)} correction</span>:!readOnly&&eligible(movement)?<button aria-label={`Request correction for movement ${movement.id}`} onClick={()=>openCorrection(movement.id)}>Request correction</button>:<small>Use owning workflow{!movement.origin?' · legacy record':''}</small>}</td></tr>)}
-        {filteredMovements.length === 0 && <tr><td className="empty-cell" colSpan={10}>No movements match this view. Choose All movements to see the complete history.</td></tr>}
-      </tbody></table></div><Pagination {...movementsPage} label="movement records"/>
-    </section>
+  return <>
+    <StockWorkspaceView section={section} onSectionChange={setSection} readOnly={readOnly} onRecordMovement={()=>openMovement()}
+      balances={{search,onSearch:next=>{setSearch(next);balancesPage.setPage(1);},page:balancesPage,activeCount:activeProducts.length,totals,onRecord:id=>openMovement(id),onAssess:setAssessmentProduct}}
+      history={{filter:movementFilter,onFilter:next=>{setMovementFilter(next);movementsPage.setPage(1);},page:movementsPage,correctionLinks,onCorrection:openCorrection}}
+      assessment={{products:activeProducts,selectedProductId:assessmentSelection,onSelect:setAssessmentSelection,onAssess:setAssessmentProduct,onExperiment:()=>setExperimentOpen(true)}}/>
     {correction&&<CorrectionModal original={movements.find(m=>m.id===correction)} onClose={()=>setCorrection(null)} onSaved={message=>{setCorrection(null);onNotice(message);}}/>}
     {selectedProductId && <MovementModal products={activeProducts} initialProductId={selectedProductId} onClose={() => setSelectedProductId(null)} onError={onError} onSaved={message => {setSelectedProductId(null);onNotice(message);}}/>}
-  </div>;
-}
-
-function StockMetric({label,value:metric,detail,warning=false}:{label:string;value:number;detail:string;warning?:boolean}) {
-  return <article className={`stock-metric ${warning ? "warning" : ""}`}><small>{label}</small><b>{metric.toLocaleString()}</b><span>{detail}</span></article>;
+    {assessmentProduct&&<InventoryRisk key={`${member.uid}.${member.workspaceId}.${assessmentProduct}`} member={member} productId={assessmentProduct} onClose={()=>setAssessmentProduct(null)} onNotice={onNotice} onError={onError}/>}
+    {experimentOpen&&<InventoryAIExperiment key={`${member.uid}.${member.workspaceId}`} member={member} products={activeProducts} onClose={()=>setExperimentOpen(false)} onNotice={onNotice}/>}
+  </>;
 }
 
 function CorrectionModal({original,onClose,onSaved}:{original?:RecordData;onClose:()=>void;onSaved:(message:string)=>void}){

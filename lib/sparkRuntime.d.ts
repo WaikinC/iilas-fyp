@@ -1,0 +1,10 @@
+export type SparkProfile={schema:'iilas-spark-msi-1.0';mode:'spark-msi';projectId:'fyp-inventory-and-logistics';webOrigins:readonly string[];apiOrigin:string;backendInstanceId:string;adoptionSha256:string;evidenceStore:'msi-local'};
+export type SparkLoopbackTestRuntime={schema:'iilas-spark-loopback-test-1.0';mode:'spark-loopback-test';projectId:'fyp-inventory-and-logistics';backendInstanceId:string;apiOrigin:'http://127.0.0.1:8011';webOrigins:readonly ['http://127.0.0.1:5173'];emulatorHosts:{auth:'127.0.0.1:9099';firestore:'127.0.0.1:8081';storage:'127.0.0.1:9199'}};
+export type SparkRuntime=SparkProfile|SparkLoopbackTestRuntime;
+export function sparkExact(raw:unknown,keys:readonly string[]):Record<string,unknown>;
+export function validateSparkProfile(raw:unknown,allowlist:readonly SparkProfile[]):SparkProfile;
+export function validateSparkLoopbackTest(raw:unknown):SparkLoopbackTestRuntime;
+export function validateSparkRuntime(raw:unknown,allowlist:readonly SparkRuntime[]):SparkRuntime;
+export function sparkRecoveryKey(profile:SparkRuntime,uid:string,legacyKey:string):string;
+export function sparkRecordCreationRecoveryKey(profile:SparkRuntime,uid:string,key:string):string;
+export function initialiseSparkSDKs<A,U,D>(input:{profile:SparkRuntime;allowlist:readonly SparkRuntime[];options:{projectId:string};origin:string;existing?:A;factories:{initialise:(options:unknown,name:string)=>A;auth:(app:A)=>U;firestore:(app:A)=>D;connect:(sdk:U|D,endpoint:{host:string;port:number},kind:string)=>void}}):{profile:SparkRuntime;app:A;auth:U;db:D};
