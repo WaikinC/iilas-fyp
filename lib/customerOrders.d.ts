@@ -1,0 +1,15 @@
+import type{CustomerSummary}from'./customerPortal';
+export type OrderStatus='Submitted'|'Accepted'|'Rejected'|'Cancelled';export type OrderKind='Submit'|'Cancel'|'Decide';
+export type OrderRequestData={recipient:string;phone:string;address:string;requestedDelivery:string;notes:string;items:{description:string;quantity:number}[]};
+export type OrderMutation={kind:'Submit';operationId:string;data:OrderRequestData}|{kind:'Cancel';operationId:string;orderId:string;expectedVersion:number}|{kind:'Decide';operationId:string;orderId:string;expectedVersion:number;decision:'Accept'|'Reject';message:string;expectedDelivery:string;mapping:{lineIndex:number;productId:string}[]};
+export type NewOrderMutation=OrderMutation extends infer R?R extends OrderMutation?Omit<R,'operationId'>:never:never;
+export type OrderOutcome={schema:'iilas-customer-order-outcome-1.0';kind:OrderKind;operationId:string;state:'Completed'|'Cancelled'|'NotFound';orderId:string|null;orderVersion:number|null;reference:string|null;orderStatus:OrderStatus|null;shipmentId:string|null;shipmentReference:string|null;replayed:boolean};
+export type OrderSummary={orderId:string;reference:string;status:OrderStatus;requestedDelivery:string;lineCount:number;version:number;createdAtMs:number;updatedAtMs:number;shipment:CustomerSummary|null;shipmentUnavailable:boolean};
+export type StaffOrderSummary=OrderSummary&{recipient:string;customer:{uid:string;displayName:string;eligible:boolean}};
+export type OrderDetail=OrderSummary&{data:OrderRequestData;message:string;canCancel:boolean};export type StaffOrderDetail=StaffOrderSummary&{data:OrderRequestData;message:string;canCancel:boolean};
+export type OrderPage<T=OrderSummary>={rows:T[];hasMore:boolean;cursor:string|null;observedAtMs:number};
+export const ORDER_STATUSES:readonly OrderStatus[];export const ORDER_KINDS:readonly OrderKind[];
+export function validateOrderRequestData(raw:unknown):OrderRequestData;export function validateOrderMutation(raw:unknown):OrderMutation;export function mapOrderItems(request:OrderRequestData,mapping:{lineIndex:number;productId:string}[]):{productId:string;quantity:number}[];export function validateOrderOutcome(raw:unknown,request:OrderMutation):OrderOutcome;
+export function validateOrderSummary(raw:unknown,staff?:false):OrderSummary;export function validateOrderSummary(raw:unknown,staff:true):StaffOrderSummary;
+export function validateOrderPage(raw:unknown,staff?:false):OrderPage;export function validateOrderPage(raw:unknown,staff:true):OrderPage<StaffOrderSummary>;
+export function validateOrderDetail(raw:unknown,staff?:false):OrderDetail;export function validateOrderDetail(raw:unknown,staff:true):StaffOrderDetail;export function orderCanonical(value:unknown):string;

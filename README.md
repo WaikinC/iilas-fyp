@@ -10,6 +10,10 @@ Approved Drivers have a separate local Android build for saved assignments, queu
 
 The FYP web demonstration is available at [IILAS](https://fyp-inventory-and-logistics.web.app). Firebase Spark hosts the website, login and database; MSI runs trusted commands, proof files, the frozen stock/delivery AI and the private demonstration blockchain. Keep MSI awake and online when using the app from another laptop. Billing remains disabled. Fictional records are retained for presenting the workflows. See the [current demonstration guide](docs/SPARK_MSI_CLOUD_STATUS_2026-10-29.md) for verified checks, startup and remaining limitations.
 
+## Customer order requests (local development)
+
+The Customer portal now includes Orders and Shipments. Customers request items by description; Admin, Manager or Logistics staff review and match them in Order & Dispatch. Explicit acceptance creates one linked Draft shipment and private tracking access, then the existing warehouse, transport and dispatch workflow completes fulfilment. Customers can access only their own requests/shared shipments and check an eligible delivered proof without wallet registration. This extension is not yet published to the hosted website. See the [Customer workflow guide](docs/CUSTOMER_ORDERS_LOCAL_GUIDE_2026-11-04.md).
+
 ## What the app does
 
 **Reports & Statistics** provides large inventory/logistics charts, labelled status colours, exact-value tables and links to the underlying records. Open **Overview** and select **Refresh overview**, or choose a focused report in Inventory, Logistics or AI & Verification. Date captions distinguish current stock from dated activity; statistics use complete bounded selections and explain unavailable facts. See the [reporting guide](docs/REPORTS_STATISTICS_LIVE_2026-11-02.md).

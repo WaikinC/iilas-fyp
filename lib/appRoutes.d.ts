@@ -1,4 +1,4 @@
-export type AppModule='dashboard'|'products'|'stock'|'warehouse'|'procurement'|'shipments'|'fleet'|'transport'|'delivery'|'reports'|'team'|'customer';
+export type AppModule='dashboard'|'products'|'stock'|'warehouse'|'procurement'|'shipments'|'fleet'|'transport'|'delivery'|'reports'|'team'|'customer'|'customerOrders';
 export type AppRoute={module:AppModule|'root'|'not-found';recordId:string|null;path:string};
 export const APP_MODULE_PATHS:Readonly<Record<AppModule,string>>;
 export function appRoutePath(module:AppModule,recordId?:string|null):string;

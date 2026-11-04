@@ -4,4 +4,6 @@ export type CustomerDetail=CustomerSummary&{timeline:{rows:{status:string;atMs:n
 export type CustomerPage={rows:CustomerSummary[];cursor:string|null;hasMore:boolean;observedAtMs:number;scanned:number};
 export function validateCustomerList(value:unknown):CustomerPage;
 export function validateCustomerDetail(value:unknown):CustomerDetail;
+export type CustomerProofIntegrity={shipmentId:string;evidenceId:string;outcome:'Verified'|'NotRegistered'|'Unmatched'|'Unavailable';checkedAtMs:number};
+export function validateCustomerProofIntegrity(value:unknown):CustomerProofIntegrity;
 export function fetchCustomerProof(options:{user:{uid:string;getIdToken:(forceRefresh?:boolean)=>Promise<string>};customerUid:string;shipmentId:string;proof:CustomerProof;siteUrl:string;isCurrent:()=>boolean;signal?:AbortSignal;fetcher?:typeof fetch;environment?:import('./demoEnvironment.js').DemoEnvironment|import('./sparkRuntime.js').SparkRuntime}):Promise<Blob>;

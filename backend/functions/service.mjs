@@ -5,6 +5,8 @@ import {authorizeEvidence,prepareEvidenceRegistration} from './evidenceRegistrat
 import {createIntegrityCommands} from './integrityWorkflow.mjs';
 import {createFleetTransportCommands} from './fleetTransport.mjs';
 import {createCustomerCommands} from './customerAccess.mjs';
+import {createCustomerOrderCommands,prepareCustomerOrderShipmentDeletion} from './customerOrders.mjs';
+import {createCustomerProofIntegrity} from './customerProofIntegrity.mjs';
 import {createReportingCommands} from './reporting.mjs';
 import {createRecordCreationCommands} from './recordCreation.mjs';
 import {preparePurchaseTransition,writePurchaseTransition} from './purchaseOrderWorkflow.mjs';
@@ -202,7 +204,7 @@ async function prepareRecordSave(tx,{scope:s,actor,kind,recordId:key,data:source
     if(old){const oldKeys=kind==='products'?[`${s}_sku_${old.sku.trim().toUpperCase()}`,`${s}_barcode_${old.barcode}`]:[`${s}_shipment_${old.reference.trim().toUpperCase()}`];for(const k of oldKeys.filter(k=>!newKeys.includes(k)))tx.delete(ref('uniqueKeys',k));}
     newKeys.forEach((k,index)=>{if(!keySnaps[index].exists)tx.set(ref('uniqueKeys',k),{ownerId:s,kind,recordId:key});});
     const eventId=audit(tx,s,actor,kind,key,old?'Update':'Create',version,data.name||data.reference);
-    tx.set(recordRef,{...data,ownerId:s,version,updatedBy:actor,updatedAt:now(),createdAt:old?.createdAt||now(),lastEventId:eventId,...(kind==='products'?{archived:false,locationBalances:old?locationBalances(old):[{location:data.location,quantity:data.quantityOnHand,reserved:0,warehouse:0}],warehouseReservedQuantity:old?.warehouseReservedQuantity||0,lastStockMovementId:old?.lastStockMovementId||null,lastShipmentId:old?.lastShipmentId||null}:{dispatchedAt:data.status==='Dispatched'?now():null,...(old?.handoverId?{handoverId:old.handoverId}:{}),...(old?.driverUid?{driverUid:old.driverUid}:{})})});
+    tx.set(recordRef,{...data,ownerId:s,version,updatedBy:actor,updatedAt:now(),createdAt:old?.createdAt||now(),lastEventId:eventId,...(kind==='products'?{archived:false,locationBalances:old?locationBalances(old):[{location:data.location,quantity:data.quantityOnHand,reserved:0,warehouse:0}],warehouseReservedQuantity:old?.warehouseReservedQuantity||0,lastStockMovementId:old?.lastStockMovementId||null,lastShipmentId:old?.lastShipmentId||null}:{dispatchedAt:data.status==='Dispatched'?now():null,...(old?.handoverId?{handoverId:old.handoverId}:{}),...(old?.driverUid?{driverUid:old.driverUid}:{}),...(old?.customerOrderId?{customerOrderId:old.customerOrderId}:{})})});
     const dispatchMovements=[];
     if(kind==='shipments'&&data.status==='Dispatched')data.items.forEach((item,index)=>{
       const p=products[index].data();
@@ -236,6 +238,7 @@ async function remove(auth,scope,input){
       const plan=await tx.get(ref('transportPlans',key));
       if(plan.exists&&plan.data().status==='Scheduled')fail('Cancel the transport plan before deleting the shipment.');
       if(old.status!=='Draft'||warehouse.exists&&warehouse.data().status!=='Cancelled')fail('Only Draft shipments without active warehouse work can be deleted.');
+      const cancelLinkedOrder=await prepareCustomerOrderShipmentDeletion(tx,{scope:s,actor,shipmentId:key,shipment:old});cancelLinkedOrder();
       tx.delete(snapshot.ref);tx.delete(ref('uniqueKeys',`${s}_shipment_${old.reference}`));
     }else{
       if(old.reservedQuantity>0)fail('Release stock reservations before archiving this product.');
@@ -538,6 +541,15 @@ export async function executeCommand(auth,request){
     return mobileCommands[action](auth,undefined,input);
   }
   const customerCommands=createCustomerCommands();
+  if(action==='checkCustomerProofIntegrity'){
+    if(Object.hasOwn(request,'workspaceId'))fail('Customer requests cannot select a workspace.','permission-denied');
+    return createCustomerProofIntegrity().checkCustomerProofIntegrity(auth,input);
+  }
+  const customerOrders=createCustomerOrderCommands({prepareRecordSave});
+  if(['getCustomerOrders','getCustomerOrder','mutateCustomerOrder','resolveCustomerOrderOperation'].includes(action)){
+    if(Object.hasOwn(request,'workspaceId'))fail('Customer order commands cannot select a workspace.','permission-denied');
+    return customerOrders[action](auth,input);
+  }
   if(['getCustomerShipments','getCustomerShipment'].includes(action)){
     if(Object.hasOwn(request,'workspaceId'))fail('Customer requests cannot select a workspace.','permission-denied');
     return customerCommands[action](auth,input);
@@ -549,6 +561,7 @@ export async function executeCommand(auth,request){
   Object.assign(handlers,createFleetTransportCommands());
   Object.assign(handlers,createReportingCommands());
   Object.assign(handlers,createRecordCreationCommands({prepareRecordSave,preparePurchaseCreate}));
+  Object.assign(handlers,{getCustomerOrdersForStaff:customerOrders.getCustomerOrdersForStaff,getCustomerOrderForStaff:customerOrders.getCustomerOrderForStaff});
   Object.assign(handlers,{getCustomerAccessContext:customerCommands.getCustomerAccessContext,grantCustomerShipment:customerCommands.grantCustomerShipment,revokeCustomerShipment:customerCommands.revokeCustomerShipment,resolveCustomerShipmentGrant:customerCommands.resolveCustomerShipmentGrant,resolveCustomerShipmentRevocation:customerCommands.resolveCustomerShipmentRevocation});
   if(!Object.hasOwn(handlers,action))fail('Unknown command.');
   const liveActions=['startParcelLiveSession','reserveParcelLiveFrame','analyseParcelLiveFrame','resolveParcelLiveSession','resolveParcelLiveFrame','stopParcelLiveSession','cleanupParcelLiveSession','reviewParcelLiveFrame'];

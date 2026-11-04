@@ -4,7 +4,7 @@ import {appRouteAccess,appRoutePath,parseAppRoute,type AppModule,type AppRoute} 
 export type NavigationGuard={check:(next:AppRoute,proceed:()=>void,cancel:()=>void)=>void;beforeUnload:()=>boolean};
 type Navigation={route:AppRoute;pathname:string;go:(module:AppModule,recordId?:string|null,options?:{replace?:boolean})=>void;registerGuard:(key:string,guard:NavigationGuard)=>()=>void};
 const Context=createContext<Navigation|null>(null);
-const titles:Record<string,string>={dashboard:'Dashboard',products:'Product Management',stock:'Stock Management',warehouse:'Warehouse Operations',procurement:'Replenishment & Procurement',shipments:'Order & Dispatch',fleet:'Fleet Management',transport:'Transport Management',delivery:'Delivery Monitoring',reports:'Reports & Statistics',team:'User Management',customer:'Your shipments'};
+const titles:Record<string,string>={dashboard:'Dashboard',products:'Product Management',stock:'Stock Management',warehouse:'Warehouse Operations',procurement:'Replenishment & Procurement',shipments:'Order & Dispatch',fleet:'Fleet Management',transport:'Transport Management',delivery:'Delivery Monitoring',reports:'Reports & Statistics',team:'User Management',customer:'Your shipments',customerOrders:'Your orders'};
 const routers=new WeakMap<Document,ReturnType<typeof createBrowserRouter>>();
 function routerForDocument(children:ReactNode){let router=routers.get(document);if(!router){router=createBrowserRouter([{path:'*',element:<NavigationProvider>{children}</NavigationProvider>}]);routers.set(document,router);}return router;}
 // One router per browser document; StrictMode must not create duplicate history listeners.

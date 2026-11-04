@@ -1,4 +1,5 @@
 import {copyFile} from 'node:fs/promises';
+await copyFile(new URL('../lib/customerOrders.js',import.meta.url),new URL('../backend/functions/customerOrders.js',import.meta.url));
 await copyFile(new URL('../lib/businessCodes.js',import.meta.url),new URL('../backend/functions/businessCodes.js',import.meta.url));
 await copyFile(new URL('../lib/recordCreation.js',import.meta.url),new URL('../backend/functions/recordCreation.js',import.meta.url));
 await copyFile(new URL('../lib/demoEnvironment.js',import.meta.url),new URL('../backend/functions/demoEnvironment.js',import.meta.url));

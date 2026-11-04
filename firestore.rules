@@ -89,6 +89,11 @@ service cloud.firestore {
     match /mobileEvidenceRequests/{id} { allow read, write: if false; }
     // {ownerId,customerUid,shipmentId,active,shareLocation,notes,version,...}:
     // live grants are read and written only through scoped trusted commands.
+    // Customer order input, receipts, reservations and permanent linkage are server-only.
+    match /customerOrders/{id} { allow read, write: if false; }
+    match /customerOrderOperations/{id} { allow read, write: if false; }
+    match /customerOrderReferences/{id} { allow read, write: if false; }
+    match /customerOrderShipmentLinks/{id} { allow read, write: if false; }
     match /customerShipmentGrants/{id} { allow read, write: if false; }
     // Integrity requests retain signing/check leases and private recovery input.
     match /integrityRequests/{id} { allow read, write: if false; }

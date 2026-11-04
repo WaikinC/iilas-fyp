@@ -1,3 +1,7 @@
+## Customer order extension — local verification, 4 November 2026
+
+Orders/Shipments Customer navigation, recoverable requests, separate staff review/mapping and atomic generated-SHP linkage are implemented in the isolated development checkout. Private tracking starts with location sharing off. Normal warehouse/transport/dispatch remains authoritative; eligible linked Draft deletion cancels the order without resurrection. Read-only current-proof integrity checking projects safe outcomes only. Actual emulator request/recovery/boundary, grouped browser and full warehouse/transport/dispatch/proof checks pass; final receipts are recorded in the verification note. Firebase publication, parcel/camera and physical phone testing remain held. See the [local guide](docs/CUSTOMER_ORDERS_LOCAL_GUIDE_2026-11-04.md).
+
 ## Module URLs verified locally; publication held — 3 November 2026
 
 Separate module and shipment/purchase/Customer detail URLs are implemented in the isolated checkout with login/role isolation, browser history and unsaved-work protection. Local build/lint, route and actual browser checks pass; see docs/MODULE_URL_NAVIGATION_LOCAL_2026-11-03.md. The user explicitly requested no Firebase release until after the supervisor session and separately authorized saving the code to the private GitHub repository. Current hosted app/MSI services are unchanged; parcel and phone testing remain deferred.

@@ -15,6 +15,7 @@ function safeDay(value){return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.te
 const deliveryStatuses=['Dispatched','In Transit','Attempt Failed','Delivered','Returned'];
 function statusFor(shipment,delivery){if(['Draft','Prepared'].includes(shipment.status))return 'Preparing';if(shipment.status!=='Dispatched')return 'Status unavailable';return delivery&&delivery.ownerId===shipment.ownerId&&delivery.shipmentId===shipment.id&&deliveryStatuses.includes(delivery.status)?delivery.status:'Dispatched';}
 function summary(shipment,delivery){return {shipmentId:shipment.id,reference:typeof shipment.reference==='string'?shipment.reference.slice(0,120):'Reference unavailable',expectedDelivery:safeDay(shipment.expectedDelivery),status:statusFor(shipment,delivery)};}
+export const customerShipmentSummary=summary;
 export function customerProof({scope,shipmentId,delivery,evidenceId,evidence}){
  if(!delivery||delivery.ownerId!==scope||delivery.shipmentId!==shipmentId||delivery.status!=='Delivered'||delivery.proofId!==evidenceId||!evidence||evidence.ownerId!==scope||evidence.shipmentId!==shipmentId||evidence.type!=='Proof of Delivery'||evidence.stage!=='Delivery'||evidence.path!==`evidence/${scope}/${shipmentId}/${evidenceId}`||!Number.isSafeInteger(evidence.bytes)||evidence.bytes<1||evidence.bytes>10*1024*1024||!/^[a-f0-9]{64}$/.test(evidence.sha256??''))return null;
  const extensions={'application/pdf':'.pdf','image/jpeg':'.jpg','image/png':'.png','image/webp':'.webp'},extension=extensions[evidence.contentType];if(!extension)return null;

@@ -1,0 +1,3 @@
+import type{OrderKind,OrderMutation,NewOrderMutation,OrderOutcome}from'./customerOrders';
+export type CustomerOrderClient={pending:(kind:OrderKind)=>OrderMutation|null;start:(input:NewOrderMutation)=>Promise<OrderOutcome>;retry:(kind:OrderKind)=>Promise<OrderOutcome>;check:(kind:OrderKind)=>Promise<OrderOutcome>;cancel:(kind:OrderKind)=>Promise<OrderOutcome>;activate:()=>void;dispose:()=>void};
+export function createCustomerOrderClient(options:{storage:Pick<Storage,'getItem'|'setItem'|'removeItem'>;context:{uid:string;environmentKey:string};command:(action:string,input:unknown)=>Promise<unknown>;isCurrent:()=>boolean;withLock?:<T>(key:string,work:()=>Promise<T>)=>Promise<T>}):CustomerOrderClient;

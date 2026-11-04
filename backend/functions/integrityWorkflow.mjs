@@ -52,6 +52,7 @@ export const localIntegrityRPC={
  }),
 };
 const defaultRPC=Object.fromEntries(['inspect','lookup','receipt','events'].map(method=>[method,(...args)=>(process.env.IILAS_DEMO_MODE==='cloud-demo'?cloudIntegrityRPC():['spark-msi','spark-loopback-test'].includes(process.env.IILAS_DEMO_MODE)?createSparkIntegrityRPC():localIntegrityRPC)[method](...args)]));
+export const integrityReaderRPC=defaultRPC,checkIntegrityConfiguration=validConfiguration;
 export function createIntegrityCommands({rpc=defaultRPC,clock=Date.now,configuration=integrityConfiguration,files=integrityFiles}={}){
  const configured=()=>validConfiguration(configuration());
  const sameConfig=c=>{try{return configHash(configured())===configHash(c);}catch{return false;}};
