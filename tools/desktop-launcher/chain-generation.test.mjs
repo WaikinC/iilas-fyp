@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {assertChainGeneration} from './chain-generation.mjs';
+const fixture=()=>({expected:{chainId:31337,instanceId:'saved-instance',genesisBlockHash:'0x'+'a'.repeat(64),deploymentBlockHash:'0x'+'b'.repeat(64)},instanceId:'saved-instance',chainId:31337,processPid:123,listenerPid:123,startedAt:'2026-11-02T10:00:00.000Z',ownerStartedAt:'2026-11-02T10:00:00.000Z',genesisHash:'0x'+'a'.repeat(64),deploymentBlockHash:'0x'+'b'.repeat(64)});
+test('same saved generation and exact listener process passes',()=>assert.doesNotThrow(()=>assertChainGeneration(fixture())));
+test('reset on the same process refuses a changed genesis or deployment block',()=>{for(const key of ['genesisHash','deploymentBlockHash','instanceId'])assert.throws(()=>assertChainGeneration({...fixture(),[key]:'0x'+'c'.repeat(64)}));});
+test('different listener owner or process start is refused',()=>{assert.throws(()=>assertChainGeneration({...fixture(),listenerPid:456}));assert.throws(()=>assertChainGeneration({...fixture(),startedAt:'2026-11-02T10:01:00.000Z'}));});
+test('missing block identity and wrong chain are refused',()=>{assert.throws(()=>assertChainGeneration({...fixture(),genesisHash:undefined}));assert.throws(()=>assertChainGeneration({...fixture(),chainId:1}));});

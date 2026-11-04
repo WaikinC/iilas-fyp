@@ -1,0 +1,5 @@
+export function assertChainGeneration({expected,chainId,processPid,listenerPid,startedAt,ownerStartedAt,genesisHash,deploymentBlockHash,instanceId}){
+ const hash=value=>typeof value==='string'&&/^0x[a-f0-9]{64}$/.test(value);
+ if(chainId!==expected.chainId||!Number.isSafeInteger(processPid)||processPid<1||processPid!==listenerPid||!Number.isFinite(Date.parse(startedAt))||!Number.isFinite(Date.parse(ownerStartedAt))||Math.abs(Date.parse(startedAt)-Date.parse(ownerStartedAt))>2000||!hash(expected.genesisBlockHash)||!hash(expected.deploymentBlockHash)||genesisHash!==expected.genesisBlockHash||deploymentBlockHash!==expected.deploymentBlockHash||typeof expected.instanceId!=='string'||!expected.instanceId||instanceId!==expected.instanceId)throw Error('The saved blockchain generation differs');
+ return true;
+}
