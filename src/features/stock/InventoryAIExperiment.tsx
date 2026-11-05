@@ -5,10 +5,11 @@ import {X} from 'lucide-react';
 import {auth,db} from '../../../lib/firebase';
 import {getActiveWorkspace,workspaceCommand} from '../../../lib/workspace';
 import {createInventoryStockAIClient,type Pending,type PendingKind} from '../../../lib/inventoryStockAIClient';
-import {contextFeaturesForScenario,decodeInventoryExperimentHistory,validateDemoProductFacts,type ContextScenario,type DemoSource,type KnownHistory} from '../../../lib/inventoryContextAI';
-import type {Scenario} from '../../../lib/inventoryAI';
+import {contextFeaturesForScenario,decodeInventoryExperimentHistory,validateDemoProductFacts,type ContextFeatureName,type ContextScenario,type DemoSource,type KnownHistory} from '../../../lib/inventoryContextAI';
+import type {Scenario,StockClass} from '../../../lib/inventoryAI';
 import {useDialogFocus} from '../../components/useDialogFocus';
 import Field from '../../components/FormField';
+import RiskScoreBreakdown from '../../components/RiskScoreBreakdown';
 import type {Membership} from '../workspace/WorkspaceGate';
 
 type Props={products:{id:string;[key:string]:unknown}[];member:Membership;onClose:()=>void;onNotice:(s:string)=>void};
@@ -17,17 +18,37 @@ type FormValues={[K in keyof ContextScenario]:string};
 const fields:[keyof Scenario,string,number,number|'any'][]=[['quantityOnHand','On-hand quantity',1000000,1],['reservedQuantity','Reserved quantity',1000000,1],['reorderLevel','Reorder level',1000000,1],['movementFrequency','30-day movement count',2000,1],['adjustmentCount','30-day adjustment count',2000,1],['daysSinceReplenishment','Days since replenishment',36500,'any']];
 const blank=():FormValues=>({quantityOnHand:'',reservedQuantity:'',reorderLevel:'',movementFrequency:'',adjustmentCount:'',daysSinceReplenishment:'',additionalFirmQuantity:'',additionalDueDays:'',incomingQuantity:'',incomingEtaDays:'',supplyStatus:''});
 const numeric=(v:string)=>v.trim()===''?NaN:Number(v);
+const nextStockStep:Record<StockClass,string>={
+ Normal:'Compare the saved stock and demand inputs before using this example in a staff review.',
+ 'Reorder Risk':'Compare available stock with the reorder level. Review incoming supply before deciding whether to reorder.',
+ 'Critical Stock Risk':'Check which commitments are due first and confirm whether incoming supply can arrive in time.',
+};
+const stockFeatureLabel:Record<ContextFeatureName,string>={
+ available_quantity:'Available stock',reserved_quantity:'Reserved stock',movement_frequency:'30-day movement count',
+ reorder_distance:'Distance from the reorder level',adjustment_count:'30-day adjustment count',
+ days_since_replenishment:'Days since replenishment',additional_firm_quantity:'Additional committed units',
+ additional_due_days:'Days until additional demand is due',incoming_quantity:'Incoming units',
+ incoming_eta_days:'Days until incoming supply is due',supply_none:'No incoming batch',
+ supply_planned:'Planned incoming supply',supply_confirmed:'Confirmed incoming supply',supply_disrupted:'Disrupted incoming supply',
+};
+const units=(value:number)=>value.toLocaleString('en-MY');
 function HistoryItem({item}:{item:History}){
  if(item.kind==='unsupported')return <article className="inventory-risk-snapshot"><h4>Retained experiment unavailable</h4><p>{item.reason} Its saved data has been retained.</p><code>{item.id}</code></article>;
- const r=item.record,p=r.prediction;
- return <article className="inventory-risk-snapshot"><h4><span className="stock-status" data-status={r.status}>{r.status}</span>{p&&<>: <span className="stock-status" data-status={p.label}>{p.label}</span></>}</h4>
-  <p>{new Date(r.createdAt.seconds*1000).toLocaleString()} · {item.kind==='legacy'?'Original six-input experiment':item.kind==='demo-product'?'Demo-product experiment':'Context experiment'} · No operational acceptance</p>
-  <p>This result’s simulated study: {(r.source.metrics.accuracy*100).toFixed(2)}% accuracy; {(r.source.metrics.criticalRecall*100).toFixed(2)}% Critical recall across {r.source.metrics.observations} scenarios.</p>
-  {item.kind==='demo-product'&&<p>Recorded demonstration product: {item.record.sourceProduct.name} · {item.record.sourceProduct.sku} · ID {item.record.sourceProduct.productId} · version {item.record.sourceProduct.productVersion} · observed {new Date(item.record.sourceProduct.observedAtMs).toLocaleString()}. Balances were recorded; history, demand and supply facts were entered as fictional context.</p>}
+ const r=item.record,p=r.prediction,available=r.features.available_quantity;
+ const source=item.kind==='demo-product'?item.record.sourceProduct:null;
+ return <article className="inventory-risk-snapshot stock-risk-result"><h4><span className="stock-status" data-status={p?.label??r.status}>{p?.label??'No model result'}</span></h4>
+  <p className="stock-risk-meta">{item.kind==='legacy'?'Original six-input experiment':item.kind==='demo-product'?'Recorded demo product':'Fictional scenario'} · {new Date(r.createdAt.seconds*1000).toLocaleString()}</p>
+  {source&&<p>{source.name} · {source.sku} · version {source.productVersion}. Recorded balances and fictional context.</p>}
+  {p&&<p className="stock-risk-next"><strong>Next step</strong> {nextStockStep[p.label]}</p>}
   {r.reason&&<p>{r.reason.message}</p>}
-  {p&&<><dl className="inventory-risk-facts">{p.classOrder.map((label,i)=><div key={label}><dt>{label} model score</dt><dd>{(p.probabilities[i]*100).toFixed(1)}%</dd></div>)}</dl><p>Prediction computation {p.processingTimeMs.toFixed(1)} ms · Service time {p.totalProcessingTimeMs.toFixed(1)} ms</p>{p.outOfRange.length>0&&<p role="note">Outside development range: {p.outOfRange.join(', ')}. This scenario is outside observed development inputs.</p>}</>}
-  <details><summary>Scenario and model lineage</summary><p>On hand {r.scenario.quantityOnHand}, reserved {r.scenario.reservedQuantity}, reorder level {r.scenario.reorderLevel}, movements {r.scenario.movementFrequency}, adjustments {r.scenario.adjustmentCount}, replenishment age {r.scenario.daysSinceReplenishment} days.</p>
+  <p><strong>Saved stock comparison</strong> {units(available)} available · reorder level {units(r.scenario.reorderLevel)}. {available<=r.scenario.reorderLevel?'At or below the reorder level.':'Above the reorder level.'}</p>
+  {p&&p.outOfRange.length>0&&<p className="stock-risk-warning" role="note"><strong>Outside the model’s development range</strong> {p.outOfRange.map(key=>stockFeatureLabel[key]).join(', ')}. Treat this example with extra caution.</p>}
+  {p&&<RiskScoreBreakdown selectedLabel={p.label} scores={p.classOrder.map((label,i)=>({label,value:p.probabilities[i]}))}/>}
+  <details><summary>Saved inputs and model details</summary><p>On hand {r.scenario.quantityOnHand}, reserved {r.scenario.reservedQuantity}, reorder level {r.scenario.reorderLevel}, movements {r.scenario.movementFrequency}, adjustments {r.scenario.adjustmentCount}, replenishment age {r.scenario.daysSinceReplenishment} days.</p>
    {(item.kind==='context'||item.kind==='demo-product')&&<p>Additional firm quantity {item.record.scenario.additionalFirmQuantity}; due {item.record.scenario.additionalDueDays===null?'not applicable':`${item.record.scenario.additionalDueDays} days`}. Incoming quantity {item.record.scenario.incomingQuantity}; ETA {item.record.scenario.incomingEtaDays===null?'not applicable':`${item.record.scenario.incomingEtaDays} days`}; supply status {item.record.scenario.supplyStatus}.</p>}
+   {source&&<p>Product ID {source.productId} · observed {new Date(source.observedAtMs).toLocaleString()}</p>}
+   <p>Simulated study for this result recorded {(r.source.metrics.accuracy*100).toFixed(2)}% accuracy; {(r.source.metrics.criticalRecall*100).toFixed(2)}% Critical recall across {r.source.metrics.observations} scenarios.</p>
+   {p&&<p>Prediction computation {p.processingTimeMs.toFixed(1)} ms · Service time {p.totalProcessingTimeMs.toFixed(1)} ms</p>}
    <p>Input <code>{r.inputSha256}</code></p>{Object.entries(r.source).filter(([key])=>key.endsWith('Sha256')).map(([key,value])=><p key={key}>{key}: <code>{String(value)}</code></p>)}
   </details>
  </article>;
@@ -35,7 +56,7 @@ function HistoryItem({item}:{item:History}){
 export default function InventoryAIExperiment({products,member,onClose,onNotice}:Props){
  const [demoReorders,setDemoReorders]=useState<boolean|null>(null);
  const [form,setForm]=useState(blank),[pending,setPending]=useState<Pending[]>([]),[mode,setMode]=useState('manual'),[productId,setProductId]=useState(''),[source,setSource]=useState<DemoSource|null>(null),[previewBusy,setPreviewBusy]=useState(false),[ack,setAck]=useState(false),[recoveryBlocked,setRecoveryBlocked]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[records,setRecords]=useState<History[]>([]),[cursors,setCursors]=useState<(QueryDocumentSnapshot|null)[]>([null]),[last,setLast]=useState<QueryDocumentSnapshot|null>(null),[more,setMore]=useState(false);
- const dialog=useRef<HTMLElement>(null),inFlight=useRef(false),generation=useRef(0),selection=useRef(0);
+ const dialog=useRef<HTMLElement>(null),historyHeading=useRef<HTMLHeadingElement>(null),inFlight=useRef(false),generation=useRef(0),selection=useRef(0);
  const current=useCallback(()=>auth?.currentUser?.uid===member.uid&&getActiveWorkspace()?.uid===member.uid&&getActiveWorkspace()?.workspaceId===member.workspaceId,[member.uid,member.workspaceId]);
  const client=useMemo(()=>createInventoryStockAIClient({storage:sessionRecoveryStorage,context:{uid:member.uid,scope:member.workspaceId},command:workspaceCommand,isCurrent:current}),[member.uid,member.workspaceId,current]);
  const close=()=>{if(!inFlight.current)onClose();};useDialogFocus(dialog,close);
@@ -56,16 +77,17 @@ export default function InventoryAIExperiment({products,member,onClose,onNotice}
  }
  function submit(e:FormEvent){e.preventDefault();void send('start');}
  return <div className="modal-backdrop"><section ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="stock-ai-title" className="modal stock-modal inventory-risk-modal stock-ai-modal">
-  <header><div><h2 id="stock-ai-title">Stock AI experiment</h2><p>Enter a fictional stock scenario to try the frozen Random Forest.</p></div><button type="button" className="icon-button" aria-label="Close stock AI experiment" disabled={busy} onClick={close}><X size={16}/></button></header>
-  <p className="stock-ai-disclosure">Simulated scenario — not an assessment of your inventory. AI-assisted teaching labels · Independent accuracy validation pending. This is not operationally approved and cannot change stock or create purchase orders.</p>
-  <p>The context study scored 81.53% accuracy (587/720), with 79.00% precision and 87.78% recall for Critical Stock Risk. It used 60 held-out simulated stock families. The accuracy interval is 78.54–84.86%; this does not guarantee 80% accuracy. Model scores are uncalibrated and real inventory history remains unqualified.</p>
-  <p>{demoReorders===null?'Checking local demo alert configuration…':demoReorders?'New product-bound risk results create separate demo alerts and requirements in Replenishment & Procurement. Normal, Unavailable, manual and historical results create no demo review items.':'Automatic demo alerts are disabled or unavailable in this profile. Stock experiments and saved-request recovery remain separate.'}</p>
-  {error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status">{notice}</p>}
+  <header><div><h2 id="stock-ai-title">Stock AI experiment</h2><p>Try a scenario and see which stock risk label the Random Forest selects.</p></div><button type="button" className="icon-button" aria-label="Close stock AI experiment" disabled={busy} onClick={close}><X size={16}/></button></header>
+  <p className="stock-ai-disclosure"><strong>Fictional scenarios only.</strong> Choose fully fictional inputs or recorded demo balances with fictional history, demand and supply. Use the results for practice and staff review. Stock movements and purchase approval use their existing workflows.</p>
+  <details className="stock-risk-disclosure"><summary>Study results and limits</summary><p>The context study scored 81.53% accuracy (587/720), with 79.00% precision and 87.78% recall for Critical Stock Risk across 60 held-out simulated stock families. The accuracy interval was 78.54–84.86%. The labels were AI-assisted. Independent validation and real inventory history qualification are pending.</p><p>The highest model score determines the label. If scores tie, the model prefers Critical Stock Risk, then Normal, then Reorder Risk.</p></details>
+  <p>{demoReorders===null?'Checking demo alerts…':demoReorders?'New risk results for a selected demo product create review items in Replenishment & Procurement.':'Automatic demo alerts are unavailable in this profile.'}</p>
+  {error&&<p role="alert" className="error">{error}</p>}{notice&&<div className="inventory-risk-actions"><p role="status">{notice}</p>{records.length>0&&<button type="button" onClick={()=>historyHeading.current?.focus()}>View saved results</button>}</div>}
   {pending.map((item,index)=><section key={item.kind} className="inventory-risk-recovery"><h3>{item.kind==='legacy'?'Recover previous six-input experiment':item.kind==='demo-product'?'Recover saved demo-product experiment':'Recover saved experiment'}</h3><p>The exact original input is saved in this browser session. Recover requests in the displayed order.</p><code>{item.input.operationId}</code><div className="inventory-risk-actions">{item.kind!=='legacy'&&<button disabled={busy||!canRun||index!==0||recoveryBlocked} onClick={()=>void send('retry',item.kind)}>{item.kind==='demo-product'?'Retry saved demo-product experiment':'Retry saved experiment'}</button>}<button disabled={busy||!canRun||index!==0||recoveryBlocked} onClick={()=>void send('resolve',item.kind)}>{item.kind==='legacy'?'Check previous experiment outcome':item.kind==='demo-product'?'Check saved demo-product outcome':'Check saved experiment outcome'}</button></div></section>)}
   {canRun?<form className="form-grid" onSubmit={submit}>
    <Field label="Scenario source" wide><select disabled={disabled} value={mode} onChange={e=>resetSelection(e.target.value)}><option value="manual">Fully fictional scenario</option><option value="demo-product">Selected demo product</option></select></Field>
    {mode==='demo-product'&&<><Field label="Demo inventory product" wide><select required disabled={disabled} value={productId} onChange={e=>resetSelection(mode,e.target.value)}><option value="">Choose a demonstration product</option>{products.filter(p=>p.status==='Active'&&!p.archived).map(p=><option key={p.id} value={p.id}>{String(p.name)} · {String(p.sku)}</option>)}</select></Field><p className="wide">{previewBusy?'Loading recorded balances…':source?`Recorded demonstration balances · ${source.name} · ${source.sku} · version ${source.productVersion}`:'Choose a product to read its recorded balances. No history or demand is inferred.'}</p>{source&&stale&&<p className="wide" role="alert">The product changed. Choose the placeholder or another product, then select this product again and re-enter fictional context.</p>}<label className="wide stock-ai-ack"><input type="checkbox" checked={ack} disabled={disabled} onChange={e=>setAck(e.target.checked)}/>I am using demonstration records with fictional context</label></>}
    <h3 className="wide">{mode==='demo-product'?'Recorded balances and fictional history':'Fictional stock'}</h3>
+   <details className="wide stock-risk-disclosure"><summary>What to enter for stock and history</summary><p>On-hand units are physically in stock. Reserved units are already committed. The reorder level is the number of available units at which staff review replenishment.</p><p>Count movements and adjustments over the same 30 days. Adjustments are part of the movement count. Replenishment age means days since the last receipt.</p></details>
    {fields.map(([key,label,max,step],i)=><Field key={key} label={label}><input data-dialog-initial-focus={i===0?'':undefined} aria-label={label} readOnly={mode==='demo-product'&&i<3} type="number" required min={0} max={max} step={step} disabled={disabled} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}/></Field>)}
    <h3 className="wide">Additional demand and replenishment</h3>
    <p className="wide">Reservations are already deducted. Additional firm demand means units needed beyond those reservations. Enter zero only when you know there is no additional demand. All days are measured from the same scenario cutoff.</p>
@@ -75,10 +97,10 @@ export default function InventoryAIExperiment({products,member,onClose,onNotice}
    <Field label="Incoming quantity"><input type="number" required={form.supplyStatus!=='none'} min={hasBatch?1:0} max={1000000} step={1} disabled={disabled||form.supplyStatus==='none'} value={form.incomingQuantity} onChange={e=>setForm({...form,incomingQuantity:e.target.value})}/></Field>
    <Field label="Incoming ETA days"><input type="number" required={hasBatch} min={0} max={36500} step="any" disabled={disabled||!hasBatch} value={form.incomingEtaDays} onChange={e=>setForm({...form,incomingEtaDays:e.target.value})}/></Field>
    <p className="wide">Zero days means due now. No incoming batch explicitly records zero units and no ETA; an empty field means unknown.</p>
-   <p className="wide" role="status" aria-label="Derived scenario inputs">{preview?`Available ${preview.available_quantity} · Reorder distance ${preview.reorder_distance} · Additional firm demand ${preview.additional_firm_quantity} · Incoming ${preview.incoming_quantity} (${form.supplyStatus}) · Demand deadline ${scenario.additionalDueDays===null?'not applicable':`${scenario.additionalDueDays} days`} · Incoming ETA ${scenario.incomingEtaDays===null?'not applicable':`${scenario.incomingEtaDays} days`}`:'Complete the stock facts and explicitly state additional demand and incoming supply.'}</p>
+   <p className="wide" role="status" aria-label="Derived scenario inputs">{preview?`Available ${preview.available_quantity} · Reorder distance ${preview.reorder_distance} (available minus reorder level) · Additional firm demand ${preview.additional_firm_quantity} · Incoming ${preview.incoming_quantity} (${form.supplyStatus}) · Demand deadline ${scenario.additionalDueDays===null?'not applicable':`${scenario.additionalDueDays} days`} · Incoming ETA ${scenario.incomingEtaDays===null?'not applicable':`${scenario.incomingEtaDays} days`}`:'Complete the stock facts and explicitly state additional demand and incoming supply.'}</p>
    <button className="primary navy" disabled={disabled||mode==='demo-product'&&(previewBusy||stale||!ack)}>{busy?'Analysing…':'Analyse simulated scenario'}</button>
   </form>:<p>Your role can view shared experimental history. Admin, Manager, Inventory and Warehouse can submit scenarios.</p>}
-  <h3>Experimental history</h3>{!records.length&&<p>No experimental results on this page.</p>}{records.map(item=><HistoryItem item={item} key={item.id}/>)}
+  <h3 ref={historyHeading} tabIndex={-1}>Experimental history</h3>{!records.length&&<p>No experimental results on this page.</p>}{records.map(item=><HistoryItem item={item} key={item.id}/>)}
   <div className="inventory-risk-actions"><button disabled={busy||cursors.length===1} onClick={()=>void run(async()=>{const next=cursors.slice(0,-1);await load(next.at(-1)??null);setCursors(next);})}>Newer experiments</button><button disabled={busy||!more||!last} onClick={()=>void run(async()=>{await load(last);setCursors([...cursors,last]);})}>Older experiments</button></div>
   <div className="form-actions"><button type="button" disabled={busy} onClick={close}>Close, keep saved experiment</button></div>
  </section></div>;

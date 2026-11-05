@@ -18,6 +18,12 @@ The original reports request delivery-risk RF, separate abnormality detection an
 
 Closed Delivered/Returned shipments retain history and separate rules but have no new RF facts. Legacy generic prediction history remains in Reports and Verification.
 
+### Reading the scores
+
+The MSI development interface gives each saved result its own label and next step. Open **How to read the model scores** to compare the Random Forest’s Low, Medium and High class scores for the same observation. A high model score is a prompt for staff to inspect the saved facts.
+
+The separate rule assessment adds **30** points for an overdue active delivery, **25** for two or more failed attempts, **20** for a delivered shipment without matching proof, **15** for invalid status history and **10** for an active delivery whose last update is over 24 hours old. With complete facts, **0–19** points is Low, **20–49** is Medium and **50+** is High. With incomplete facts, the record shows the rules that could be matched and leaves the total unavailable. An invalid status sequence can independently require review.
+
 ## Frozen study and interpretation
 
 One bounded development phase fits four RF, four DT, two logistic-regression and one majority-Dummy candidates. Selection uses validation macro-F1; there is no refit on validation or TEST. One held-out evaluation on180 snapshots/45 families measured RF98.33% accuracy, macro-F1.9840, High precision97.37% and recall100%. DT accuracy99.44%, LR92.78%, Dummy43.89%. DT performed better than RF on this synthetic test; RF remains the report's main model. These values measure agreement with the generating policy, not genuine forecasting accuracy or an accuracy guarantee. The family-bootstrap95% accuracy interval is96.11–100%; High precision91.67–100%, recall100–100% in this synthetic sample. These intervals reflect the45 held-out families, not uncertainty under real-world domain shift. Full per-class/confusion evidence remains in ignored study metadata.

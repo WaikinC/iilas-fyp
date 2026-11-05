@@ -2,3 +2,16 @@
 @media(max-width:760px){.delivery-queue-row{grid-template-columns:1fr auto;gap:12px}.delivery-queue-row>div:first-child{grid-column:1/-1}.delivery-queue-row>button{grid-column:2;grid-row:2/4}.delivery-tabs{display:grid;grid-template-columns:1fr 1fr}.delivery-page.delivery-workspace .delivery-tabs button{padding:10px 8px}.delivery-facts{grid-template-columns:1fr;gap:12px}.delivery-detail-heading{flex-wrap:wrap}.delivery-context{padding:16px}.delivery-task>summary{padding:12px 16px}.delivery-task-content{padding:0 16px 18px}.delivery-workspace .operations-form{grid-template-columns:minmax(0,1fr)}}
 
 .delivery-workspace .delivery-risk-result h4{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.delivery-workspace .delivery-risk-actions{display:flex;flex-wrap:wrap;gap:10px}.delivery-workspace .delivery-risk-actions button:first-child{background:#6643b5;color:#fff}.delivery-workspace .delivery-risk-actions button:nth-child(2){background:#172d55;color:#fff}.delivery-workspace .customer-grant-context .integrity-actions button:last-child{border-color:#9b2635;color:#9b2635;background:#fff}.delivery-workspace :is(button,input,select):disabled{opacity:.55;cursor:not-allowed}
+
+.delivery-risk-methods,.delivery-rule-bands{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:.75rem}
+.delivery-risk-methods>div,.delivery-rule-bands>div{min-width:0;border:1px solid var(--delivery-line);border-radius:8px;background:#fff;padding:.75rem}
+.delivery-risk-methods p,.delivery-rule-bands dd{margin:.3rem 0 0;color:#48556d}
+.delivery-rule-bands dt{font-weight:650;color:var(--delivery-navy)}
+.delivery-risk-warning{padding:.7rem .85rem;border-radius:6px;background:#fff1d4;color:#805000}
+.delivery-risk-warning ul,.delivery-rule-matches ul{margin:.4rem 0 0;padding-inline-start:1.2rem}
+.delivery-rule-matches li+li{margin-top:.4rem}
+.delivery-rule-matches li strong{margin-inline-start:.5rem;font-variant-numeric:tabular-nums}
+.delivery-rule-total{font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--delivery-navy)}
+.delivery-risk-disclosure{border-top:1px solid var(--delivery-line);margin:.7rem 0}
+.delivery-risk-disclosure summary{cursor:pointer;color:var(--delivery-navy);font-weight:650;padding:.65rem 0}
+.delivery-workspace .delivery-risk-facts dt{text-transform:none}

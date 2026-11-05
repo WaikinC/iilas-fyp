@@ -105,6 +105,14 @@
 .stock-ai-modal .stock-ai-ack { display:flex; align-items:center; gap:10px; }
 .stock-ai-modal .stock-ai-ack input { width:18px; min-width:18px; height:18px; }
 .stock-ai-modal input[readonly] { background:#f0f2f5; color:#0f2348; }
+.stock-risk-result { margin: 16px 0; padding: 16px; border: 1px solid #cbd2e2; border-radius: 10px; background: #f8faff; }
+.inventory-risk-modal .stock-risk-result > :is(h3,h4) { margin: 0; }
+.stock-risk-result .inventory-risk-facts { margin: 12px 0; }
+.stock-risk-meta { color: #475569; }
+.stock-risk-next { padding: 10px 12px; border-left: 3px solid #6d28d9; background: #f5f3ff; }
+.stock-risk-next strong, .stock-risk-warning strong { display: block; }
+.stock-risk-warning { padding: 10px 12px; border-left: 3px solid #b45309; background: #fffbeb; color: #713f12; }
+.stock-risk-disclosure > summary, .stock-risk-result > details:not(.risk-score-breakdown) > summary { min-height: 44px; padding-block: 12px; box-sizing: border-box; cursor: pointer; color: #1b3b6f; font-weight: 650; }
 
 .inventory-demo-reorder code,.inventory-demo-detail code { overflow-wrap:anywhere; font-size:11px; }
 .inventory-demo-detail header { display:flex; justify-content:space-between; align-items:center; gap:12px; }

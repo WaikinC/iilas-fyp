@@ -12,6 +12,8 @@ Enter on-hand units, reserved units, reorder level, complete 30-day movement/adj
 
 Results show Normal, Reorder Risk and Critical Stock Risk model scores, retained facts, model/source hashes, timing and developmental range warnings. Scores are uncalibrated. No stock adjustment or purchase action follows. A value inside each development range does not prove the whole scenario is representative.
 
+In the MSI development interface, start with the saved label and the suggested staff check. Open **How to read the model scores** to compare the three class scores. A percentage shows model support for that label in this scenario. For an ordinary product, the **stock assessment** instead checks whether on-hand units minus reserved units are at or below the reorder level. Read the saved facts and range warnings before making a purchase decision.
+
 ## Evidence and limitations
 
 The frozen Random Forest uses 100 trees, maximum depth 12, minimum leaf size 2, balanced class weights and two threads. A consumed, one-time synthetic evaluation scored **81.53% accuracy (587/720)**, **0.8080 macro-F1**, **79.00% Critical precision** and **87.78% Critical recall (316/360)** across 60 held-out simulated families. Accuracy's family-bootstrap interval is **78.54–84.86%**. Nine Critical cases were called Normal, 35 Reorder; 45/150 Normal cases were flagged at risk.

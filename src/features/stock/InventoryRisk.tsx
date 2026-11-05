@@ -15,6 +15,29 @@ type Props={member:Membership;productId:string;onClose:()=>void;onNotice:(s:stri
 const date=(v:number)=>new Date(v).toLocaleString();
 const fact=(v:number|null|undefined)=>v==null?'Unknown':v.toLocaleString(undefined,{maximumFractionDigits:1});
 const blank={decision:'',reason:'',evidenceNotes:'',fulfilmentImpact:'',refs:''};
+const stockCheckNextStep:Record<Assessment['recommendation'],string>={
+ 'Reorder review':'Review expected receipts and stock commitments before deciding whether to reorder.',
+ 'No reorder warning':'Continue monitoring stock and review again if available units fall.',
+ 'Balance needs review':'Ask an Admin to reconcile the recorded stock and bin balances.',
+};
+
+function StockCheckSummary({assessment}:{assessment:Assessment}){
+ const features=assessment.features;
+ return <section className="stock-risk-result" aria-label="Stock check result">
+  <h3><span className="stock-status" data-status={assessment.recommendation}>{assessment.recommendation}</span></h3>
+  {assessment.reasons.map(reason=><p key={reason}>{reason}</p>)}
+  <p className="stock-risk-next"><strong>Next step</strong> {stockCheckNextStep[assessment.recommendation]}</p>
+  <dl className="inventory-risk-facts">
+   <div><dt>Available units</dt><dd>{fact(features?.available_quantity)}</dd></div>
+   <div><dt>Reorder level</dt><dd>{fact(features?features.available_quantity-features.reorder_distance:null)}</dd></div>
+  </dl>
+  <small className="stock-risk-meta">Observed {date(assessment.observedAtMs)} · Product version {assessment.productVersion}</small>
+  <details className="stock-risk-disclosure"><summary>How the reorder rule works</summary>
+   <p>Available stock equals on-hand units minus reserved units. The rule flags a reorder review when available units are at or below the reorder level.</p>
+   <dl className="inventory-risk-facts"><div><dt>Reserved units</dt><dd>{fact(features?.reserved_quantity)}</dd></div><div><dt>Available units minus reorder level</dt><dd>{fact(features?.reorder_distance)}</dd></div><div><dt>Days since last eligible recorded receipt</dt><dd>{fact(features?.days_since_replenishment)}</dd></div></dl>
+  </details>
+ </section>;
+}
 export default function InventoryRisk({member,productId,onClose,onNotice}:Props){
  const [assessment,setAssessment]=useState<Assessment|null>(null),[snapshots,setSnapshots]=useState<Saved[]>([]),[selected,setSelected]=useState<Saved|null>(null),[reviews,setReviews]=useState<Revision[]>([]);
  const [readiness,setReadiness]=useState<Readiness|null>(null),[readinessError,setReadinessError]=useState('');
@@ -34,14 +57,13 @@ export default function InventoryRisk({member,productId,onClose,onNotice}:Props)
  async function review(e:FormEvent){e.preventDefault();if(!selected)return;await run(async()=>{const evidenceRefs=form.refs.trim()?form.refs.trim().split(/\r?\n/).map(line=>{const [kind,id,...rest]=line.trim().split('/');if(rest.length)throw Error('Use collection/record-id, one reference per line.');return {kind,id};}):[];const outcome=await client.review({snapshotId:selected.id,version:selected.version,decision:form.decision as ReviewInput['decision'],reason:form.reason,evidenceNotes:form.evidenceNotes,fulfilmentImpact:form.fulfilmentImpact,evidenceRefs:evidenceRefs as ReviewInput['evidenceRefs']});if(!mounted.current)return;setSelected(null);setReviews([]);setForm(blank);setNotice('state' in outcome&&outcome.state==='Cancelled'?'The saved review was closed without recording a label. Refresh the snapshot before a new judgement.':'Human judgement recorded. This does not train or approve an AI model.');await loadSnapshots(cursors.at(-1)??null);});}
  const canReview=['Admin','Manager'].includes(member.role);
  return <div className="modal-backdrop"><section ref={dialog} tabIndex={-1} className="modal stock-modal inventory-risk-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-risk-title">
-  <header><div><h2 id="inventory-risk-title">Rule-based stock check</h2><p>Current stock facts and recorded history. Real-inventory AI prediction is unavailable.</p></div><button type="button" className="icon-button" aria-label="Close stock assessment" disabled={busy} onClick={close}><X size={16}/></button></header>
-  <section aria-label="Real inventory AI readiness"><h3>AI readiness: {readiness?.status??'Unavailable'}</h3>{readiness?.reasons.map(reason=><p key={reason}>{reason}</p>)}{readinessError&&<p>{readinessError}</p>}<p>Try fictional inputs separately in Stock AI experiment. This product is not sent to the model.</p></section>
+  <header><div><h2 id="inventory-risk-title">Rule-based stock check</h2><p>See whether this product has reached its reorder level.</p></div><button type="button" className="icon-button" aria-label="Close stock assessment" disabled={busy} onClick={close}><X size={16}/></button></header>
   {error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status" className="success-notice">{notice}</p>}
-  {assessment?<><h3><span className="stock-status" data-status={assessment.recommendation}>{assessment.recommendation}</span></h3>{assessment.reasons.map(r=><p key={r}>{r}</p>)}<small>Observed {date(assessment.observedAtMs)} · Product version {assessment.productVersion}</small>
-   <dl className="inventory-risk-facts"><div><dt>Available quantity</dt><dd>{fact(assessment.features?.available_quantity)}</dd></div><div><dt>Reserved quantity</dt><dd>{fact(assessment.features?.reserved_quantity)}</dd></div><div><dt>Distance from reorder level</dt><dd>{fact(assessment.features?.reorder_distance)}</dd></div><div><dt>Days since last eligible recorded receipt</dt><dd>{fact(assessment.features?.days_since_replenishment)}</dd></div></dl>
-   <h3>History not verified</h3><p>{assessment.history.observedMovementCount} observed movements, including {assessment.history.observedAdjustmentCount} adjustments and {assessment.history.observedCorrectionCount} corrections in the 30-day window. These counts do not prove complete history.</p><ul>{assessment.history.issues.map(issue=><li key={issue}>{issue}</li>)}</ul>
+  {assessment?<><StockCheckSummary assessment={assessment}/>
+   <details className="stock-risk-disclosure"><summary>History not verified</summary><p>{assessment.history.observedMovementCount} observed movements, including {assessment.history.observedAdjustmentCount} adjustments and {assessment.history.observedCorrectionCount} corrections in the 30-day window. Treat these as recorded counts only.</p><ul>{assessment.history.issues.map(issue=><li key={issue}>{issue}</li>)}</ul></details>
    <div className="inventory-risk-actions"><button type="button" className="primary navy" disabled={busy||!assessment.captureAllowed||Boolean(capturePending)} onClick={()=>void save()}>Save review snapshot</button><button type="button" disabled={busy} onClick={()=>void run(async()=>{const result=await workspaceCommand('getInventoryAssessment',{productId}) as Assessment;if(mounted.current)setAssessment(result);})}>Refresh stock check</button></div>
   </>:<p role="status">Loading stock facts…</p>}
+  <details className="stock-risk-disclosure"><summary>Real-inventory AI readiness · {readiness?.status??'Unavailable'}</summary>{readiness?.reasons.map(reason=><p key={reason}>{reason}</p>)}{readinessError&&<p>{readinessError}</p>}<p>Stock AI experiment uses fictional scenarios for practice.</p></details>
   {capturePending&&<div className="inventory-risk-recovery"><p>A saved snapshot operation needs confirmation for product {capturePending.productId}. Recover it before saving another.</p><button disabled={busy} onClick={()=>void save(true)}>Check saved snapshot outcome</button></div>}
   {reviewPending&&<div className="inventory-risk-recovery"><p>A saved human review needs confirmation for snapshot {reviewPending.snapshotId}. Its original judgement is preserved.</p><button disabled={busy} onClick={()=>void run(async()=>{const outcome=await client.retryReview();if(mounted.current){setNotice('state' in outcome&&outcome.state==='Cancelled'?'The saved review was closed without recording a label. Refresh the snapshot before a new judgement.':'Saved human review confirmed.');setSelected(null);await loadSnapshots(cursors.at(-1)??null);}})}>Retry saved human review</button><button disabled={busy} onClick={()=>void run(async()=>{const result=await client.resolveReview();if(mounted.current){setNotice("state" in result&&result.state==="Cancelled"?"The saved review was closed without recording a label. Refresh the snapshot before a new judgement.":"Saved human review confirmed.");setSelected(null);await loadSnapshots(cursors.at(-1)??null);}})}>Check saved review outcome</button></div>}
   <h3>Staff review data — not AI predictions</h3><p>Saving a snapshot changes no stock or purchase order. Human labels are candidate data; training eligibility remains unassessed.</p>

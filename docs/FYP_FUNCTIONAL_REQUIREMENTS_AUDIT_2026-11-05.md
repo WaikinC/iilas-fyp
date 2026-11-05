@@ -1,5 +1,9 @@
 # IILAS functional requirements audit
 
+## Risk explanation follow-up on MSI
+
+Stock Management presents the current available-unit reorder check separately from the demo model. Delivery Monitoring presents the model estimate separately from the deterministic rule points. Both demonstration screens lead with the saved label and a suggested staff check. Expand the score and source details for class scores, recorded inputs, missing or out-of-range facts, and technical evidence. These screens support Wong FR-9–13 and Choong FR-8–9 at the current demonstration scope. Model accuracy against independent warehouse and delivery outcomes remains open. See the [stock guide](INVENTORY_CONTEXT_AI_LOCAL_GUIDE_2026-10-23.md) and [delivery guide](DELIVERY_RISK_DEMO_LOCAL_GUIDE_2026-10-24.md).
+
 ## Operational gap follow-up on MSI
 
 | Report gap | Local behavior | Remaining scope |
