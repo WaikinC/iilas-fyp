@@ -1,5 +1,25 @@
 # IILAS research workflows
 
+## Inventory and delivery model development checks — 6 November 2026
+
+These are development comparisons using previously seen validation data. The app continues to serve the frozen models. The parcel study is separate.
+
+| Comparison | Accuracy | Macro-F1 | Critical or High precision | Critical or High recall |
+| --- | ---: | ---: | ---: | ---: |
+| Delivery RF baseline, synthetic validation | 96.67% | 0.9700 | 97.22% | 100% |
+| Delivery RF plus two timing inputs, same validation | 100% | 1.0000 | 100% | 100% |
+| Inventory RF14 argmax, pooled development folds | 79.72% | 0.7927 | 77.24% | 86.25% |
+| Inventory RF14 Critical threshold 0.50, same folds | 79.58% | 0.7935 | 78.77% | 83.47% |
+| Inventory RF14 Critical threshold 0.40, same folds | 79.48% | 0.7829 | 74.25% | 92.50% |
+
+**Delivery.** One supervised Random Forest fit used the original 840 training rows and the same RF settings, with two additional columns derived from the existing inputs: promised duration minus elapsed time, and elapsed time divided by promised duration. On the same 180 validation rows across 45 families it corrected six errors and made zero new ones. These timing features express relationships used by the synthetic label policy, so the improvement measures policy agreement. The one-off display wrapper looked for a field absent from its supervisor receipt and exited after the successful worker. The retained receipt shows exit code 0, 10.77 seconds and 170.2 MiB peak sampled RSS. The comparison and stopped worker were checked separately. This trial left the previously consumed TEST rows unread and saved no candidate model file. Private reproduction script, protocol and aggregate result are in the worktree's ignored `research/datasets/delivery-timing-trial-20261106/`.
+
+**Inventory.** Run `python -B research/inventory_context_threshold_audit.py <path-to-inventory-simulation-v2>` to compare the default argmax with fifteen thresholds using 2,880 saved predictions from 240 development families. Each row is scored by the model that held its family out during training. A threshold of 0.50 raised Critical precision but increased Critical-as-Normal misses from 62 to 77. A threshold of 0.40 reduced those misses to 32 but increased alerts on Normal cases from 150 to 182. Keep argmax for the demo. A follow-up experiment should test factual quantities covered before each deadline and use fresh independently labelled cases before changing alerts. The prior 720-row held-out result is separate from this sweep.
+
+**Olist delivery benchmark.** The no-fit preparation verifies 10 purchase-time candidate inputs on the same 32,245 training and 13,445 validation orders as V1, including the original exclusion counts and unit weights. It excludes reserved confirmation orders before interpreting their outcomes or building their features. The MSI Windows Job completed in 14.17 seconds at 386.7 MiB peak sampled RSS, with zero fits and zero confirmation scores. Run `python -B research/olist_v2_prepare.py prepare --acknowledge-retrospective-assumptions` once in a checkout with the canonical ignored source and V1 artifacts. Its exclusive preparation claim and sealed receipt are local. Basket/amount/profile availability at purchase is a conditional assumption. The next implementation is the registered 13-fit development comparison with balanced macro-F1. [Olist V2 protocol](OLIST_CONDITIONAL_EXPERIMENT_2026-10-20.md)
+
+**Weather and ETA experiment.** Retain the shipment, promised arrival, prediction timestamp, available operational facts and road ETA computed by that time. Join hourly rain/gust forecasts or MET Malaysia warnings only when a recorded capture or verified publication time establishes availability by the prediction timestamp and the valid period covers the expected route segment. Mark missing context explicitly. Use later recorded delivery outcomes for evaluation, with all snapshots from a shipment kept together and the last shipment period reserved. Compare the same cohort under current facts, facts plus ETA slack, and facts plus ETA slack and weather. Report macro-F1 and precision/recall for the most severe class where independently labelled. Historical Olist is a separate binary late-order benchmark and predates the available archived Open-Meteo individual runs. [Open-Meteo forecast archive](https://open-meteo.com/en/docs/single-runs-api) · [MET Malaysia weather API](https://developer.data.gov.my/realtime-api/weather)
+
 ## Delivery-risk FYP demonstration verified — 25 October 2026
 
 The approved eight-task Native implementation is verified locally. Delivery Monitoring now uses an actual frozen three-class RF, trusted as-of shipment/event/proof facts, separate retained abnormality assessments, independent manager review revisions and exact saved-operation recovery. Driver recovery remains available after reassignment. History retains original facts/model/policy identity, all three uncalibrated scores and range/data-review/timeout warnings. No automatic stock, shipment, order or notification action follows.
