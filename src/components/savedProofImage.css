@@ -1,0 +1,28 @@
+.saved-proof-preview {
+  max-width: 38rem;
+  margin: 1rem 0;
+  padding: .75rem;
+  border: 1px solid #dce1eb;
+  border-radius: 10px;
+  background: #f0f2f5;
+}
+
+.saved-proof-preview img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 24rem;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.saved-proof-preview figcaption {
+  margin-top: .5rem;
+  color: #40516c;
+  font-size: .875rem;
+  overflow-wrap: anywhere;
+}
+
+.saved-proof-feedback {
+  margin: .75rem 0;
+}

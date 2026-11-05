@@ -1,5 +1,11 @@
 # Customer order extension — local verification
 
+## Delivery monitor and saved proof images — 5 November 2026
+
+The Customer Delivery monitor uses the existing shipment links. It shows status, expected delivery, recent updates, any shared location and the current proof for delivered shipments. The staff proof panel automatically shows an image after registration and lets authorised staff open earlier saved images. PDFs remain downloadable.
+
+Verification on MSI covered a complete fictional order-to-delivery workflow using the Firebase emulators, a Driver's registered PNG and the granted Customer decoding those protected bytes. Six browser checks covered the actual proof endpoint and closing the detail during a pending refresh. Ten order workflow checks, 24 Customer interface checks, 204 Firestore and Storage access checks and 33 contract tests passed. The staff browser fixture also exercised the Spark transport and verified image cleanup after leaving the view or reassigning the Driver at desktop and narrow widths. The PNGs were synthetic test fixtures.
+
 Status: local implementation and verification; Firebase publication remains held. The isolated development checkout is `.worktrees/automatic-business-codes`, based on `47195ea`. The running MSI application/backend, AI artifacts, durable chain, ngrok configuration and cloud records were not switched or deployed. No camera, parcel-model or physical phone trial was performed.
 
 ## Implemented behavior

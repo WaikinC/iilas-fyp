@@ -6,7 +6,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {auth,demoEnvironment} from '../../../lib/firebase';
 import {workspaceCommand} from '../../../lib/workspace';
-import {fetchCustomerProof,validateCustomerDetail,validateCustomerList,validateCustomerProofIntegrity,type CustomerDetail,type CustomerPage,type CustomerProofIntegrity} from '../../../lib/customerPortal';
+import {fetchCustomerProof,validateCustomerDetail,validateCustomerList,validateCustomerProofIntegrity,type CustomerDetail,type CustomerPage,type CustomerProof,type CustomerProofIntegrity} from '../../../lib/customerPortal';
+import SavedProofImage, {isProofImage} from '../../components/SavedProofImage';
 import type {Membership} from '../workspace/WorkspaceGate';
 import './customer.css';
 import {useAppNavigation} from '../navigation/AppNavigation';
@@ -20,16 +21,28 @@ function CustomerSession({profile}:{profile:Profile}){
  const registerExitGuard=useCallback((guard:OrderExitGuard|null)=>{exit.current=guard;},[]);
  const leave=(work:()=>void)=>{if(exit.current)exit.current(work);else work();};
  const select=(next:'orders'|'shipments')=>leave(()=>{if(navigation)navigation.go(next==='orders'?'customerOrders':'customer');else setLocalTab(next);});
- return <main className="customer-portal customer-workspace"><header className="customer-header"><div className="co-brand-lockup"><span className="co-logo"><Package size={24} aria-hidden="true"/></span><div><b className="customer-brand">IILAS</b><h1>Customer portal</h1><p>{profile.displayName}</p></div></div><button onClick={()=>leave(()=>{if(auth)void signOut(auth);})}><LogOut size={17} aria-hidden="true"/>Sign out</button></header><nav className="co-main-tabs" aria-label="Customer workspace"><button aria-current={tab==='orders'?'page':undefined} className={tab==='orders'?'active':''} onClick={()=>select('orders')}><ShoppingBag size={19} aria-hidden="true"/>Orders</button><button aria-current={tab==='shipments'?'page':undefined} className={tab==='shipments'?'active':''} onClick={()=>select('shipments')}><Truck size={19} aria-hidden="true"/>Shipments</button></nav>{tab==='orders'?<CustomerOrders profile={profile} registerExitGuard={registerExitGuard}/>:<CustomerBody profile={profile}/>}<footer className="co-privacy-footer"><ShieldCheck size={16} aria-hidden="true"/>Your account shows only your own requests and shipments shared with you.</footer></main>;
+ return <main className="customer-portal customer-workspace"><header className="customer-header"><div className="co-brand-lockup"><span className="co-logo"><Package size={24} aria-hidden="true"/></span><div><b className="customer-brand">IILAS</b><h1>Customer portal</h1><p>{profile.displayName}</p></div></div><button onClick={()=>leave(()=>{if(auth)void signOut(auth);})}><LogOut size={17} aria-hidden="true"/>Sign out</button></header><nav className="co-main-tabs" aria-label="Customer workspace"><button aria-current={tab==='orders'?'page':undefined} className={tab==='orders'?'active':''} onClick={()=>select('orders')}><ShoppingBag size={19} aria-hidden="true"/>Orders</button><button aria-current={tab==='shipments'?'page':undefined} className={tab==='shipments'?'active':''} onClick={()=>select('shipments')}><Truck size={19} aria-hidden="true"/>Delivery monitor</button></nav>{tab==='orders'?<CustomerOrders profile={profile} registerExitGuard={registerExitGuard}/>:<CustomerBody profile={profile}/>}<footer className="co-privacy-footer"><ShieldCheck size={16} aria-hidden="true"/>Your account shows only your own requests and shipments shared with you.</footer></main>;
 }
 function CustomerBody({profile}:{profile:Profile}){
  const routing=useAppNavigation(),routed=Boolean(routing),routeId=routing?.route.module==='customer'?routing.route.recordId:null;
  const [page,setPage]=useState<CustomerPage|null>(null),[pageIndex,setPageIndex]=useState(0),[cursors,setCursors]=useState<(string|null)[]>([null]),[loadedDetail,setDetail]=useState<CustomerDetail|null>(null),[loading,setLoading]=useState(true),[detailLoading,setDetailLoading]=useState(false),[downloading,setDownloading]=useState(false),[error,setError]=useState('');
  const detail=routed?(loadedDetail?.shipmentId===routeId?loadedDetail:null):loadedDetail;
+ const showingShipment=routed?Boolean(routeId):Boolean(detailLoading||detail);
  const [checking,setChecking]=useState(false),[proofCheck,setProofCheck]=useState<CustomerProofIntegrity|null>(null),checkEpoch=useRef(0);
  const live=useRef(true),lifecycle=useRef(Symbol()),listEpoch=useRef(0),detailEpoch=useRef(0),listBusy=useRef(false),detailBusy=useRef(false),selection=useRef<string|null>(null),listView=useRef({index:0,cursor:null as string|null}),downloads=useRef(new Set<AbortController>()),urls=useRef(new Set<string>()),heading=useRef<HTMLHeadingElement>(null);
  const current=useCallback(()=>live.current&&auth?.currentUser?.uid===profile.uid&&profile.role==='Customer'&&profile.active&&profile.status==='Approved',[profile.uid,profile.role,profile.active,profile.status]);
- const clearProtected=useCallback(()=>{listEpoch.current++;detailEpoch.current++;checkEpoch.current++;setChecking(false);setProofCheck(null);listBusy.current=false;detailBusy.current=false;setPage(null);setPageIndex(0);setCursors([null]);listView.current={index:0,cursor:null};setDetail(null);selection.current=null;setLoading(false);setDetailLoading(false);for(const controller of downloads.current)controller.abort();},[]);
+ const clearDetail=useCallback(()=>{
+  detailEpoch.current++;
+  checkEpoch.current++;
+  detailBusy.current=false;
+  selection.current=null;
+  for(const controller of downloads.current)controller.abort();
+  setDetail(null);
+  setDetailLoading(false);
+  setChecking(false);
+  setProofCheck(null);
+ },[]);
+ const clearProtected=useCallback(()=>{listEpoch.current++;listBusy.current=false;setPage(null);setPageIndex(0);setCursors([null]);listView.current={index:0,cursor:null};setLoading(false);clearDetail();},[clearDetail]);
  const loadPage=useCallback(async(index:number,cursor:string|null)=>{
   if(!current()||listBusy.current)return;const gen=++listEpoch.current,life=lifecycle.current;listBusy.current=true;setLoading(true);setError('');
   try{const result=validateCustomerList(await workspaceCommand('getCustomerShipments',cursor?{cursor}:{}));if(gen!==listEpoch.current||life!==lifecycle.current||!current())return;setPage(result);setPageIndex(index);listView.current={index,cursor};setCursors(old=>{const next=old.slice(0,index+1);if(result.hasMore)next[index+1]=result.cursor;return next;});}
@@ -37,7 +50,17 @@ function CustomerBody({profile}:{profile:Profile}){
   finally{if(life===lifecycle.current&&gen===listEpoch.current){listBusy.current=false;if(current())setLoading(false);}}
  },[current,clearProtected]);
  const loadDetail=useCallback(async(shipmentId:string)=>{
-  if(!current())return;const gen=++detailEpoch.current,life=lifecycle.current;selection.current=shipmentId;detailBusy.current=true;checkEpoch.current++;setProofCheck(null);setChecking(false);setDetailLoading(true);setDetail(null);setError('');
+  if(!current())return;
+  const gen=++detailEpoch.current,life=lifecycle.current;
+  if(selection.current!==shipmentId)for(const controller of downloads.current)controller.abort();
+  selection.current=shipmentId;
+  detailBusy.current=true;
+  checkEpoch.current++;
+  setProofCheck(null);
+  setChecking(false);
+  setDetailLoading(true);
+  setDetail(previous=>previous?.shipmentId===shipmentId?previous:null);
+  setError('');
   try{const result=validateCustomerDetail(await workspaceCommand('getCustomerShipment',{shipmentId}));if(gen!==detailEpoch.current||life!==lifecycle.current||!current())return;if(result.shipmentId!==shipmentId)throw Error('Different shipment');setDetail(result);}
   catch{if(gen===detailEpoch.current&&life===lifecycle.current&&current()){clearProtected();setError('This shipment access is unavailable. Refresh your shipments before continuing.');}}
   finally{if(life===lifecycle.current&&gen===detailEpoch.current){detailBusy.current=false;if(current())setDetailLoading(false);}}
@@ -49,8 +72,18 @@ function CustomerBody({profile}:{profile:Profile}){
   const controllers=downloads.current,objectUrls=urls.current;
   return()=>{live.current=false;lifecycle.current=Symbol();listBusy.current=false;detailBusy.current=false;clearInterval(interval);window.removeEventListener('focus',refresh);for(const controller of controllers)controller.abort();for(const url of objectUrls)URL.revokeObjectURL(url);objectUrls.clear();};
  },[current,loadPage,loadDetail]);
- useEffect(()=>{if(!routed)return;let active=true;if(routeId){/* Retired routes and StrictMode cleanup cancel before starting a read. */void Promise.resolve().then(()=>{if(active)return loadDetail(routeId);});}else{detailEpoch.current++;selection.current=null;for(const controller of downloads.current)controller.abort();}return()=>{active=false;};},[routeId,routed,loadDetail]);
- useEffect(()=>{if(detail)heading.current?.focus();},[detail]);
+ useEffect(()=>{
+  if(!routed)return;
+  let active=true;
+  void Promise.resolve().then(()=>{
+   if(!active)return;
+   if(routeId)return loadDetail(routeId);
+   clearDetail();
+  });
+  return()=>{active=false;};
+ },[routeId,routed,loadDetail,clearDetail]);
+ const focusedShipment=detail?.shipmentId;
+ useEffect(()=>{if(focusedShipment)heading.current?.focus();},[focusedShipment]);
  async function downloadProof(){
   if(!detail?.proof||!auth?.currentUser||!current()||downloading)return;const original=detail,gen=detailEpoch.current,life=lifecycle.current,controller=new AbortController();downloads.current.add(controller);setDownloading(true);setError('');
   const timer=setTimeout(()=>controller.abort(),20000);let rejectAbort:((reason:Error)=>void)|undefined;
@@ -61,19 +94,90 @@ function CustomerBody({profile}:{profile:Profile}){
   }catch{if(gen===detailEpoch.current&&life===lifecycle.current&&current()){clearProtected();setError('The current proof could not be authorised or downloaded. Refresh your shipments.');}}
   finally{clearTimeout(timer);controller.signal.removeEventListener('abort',onAbort);downloads.current.delete(controller);if(current())setDownloading(false);}
  }
- function closeDetails(){if(routing){routing.go('customer');return;}detailEpoch.current++;selection.current=null;setDetail(null);setDetailLoading(false);for(const controller of downloads.current)controller.abort();}
+ function closeDetails(){clearDetail();routing?.go('customer');}
  async function checkIntegrity(){if(!detail?.proof||checking||!current())return;const selected=detail,gen=detailEpoch.current,life=lifecycle.current,epoch=++checkEpoch.current;setChecking(true);setProofCheck(null);setError('');try{const result=validateCustomerProofIntegrity(await workspaceCommand('checkCustomerProofIntegrity',{shipmentId:selected.shipmentId,evidenceId:selected.proof!.evidenceId}));if(epoch!==checkEpoch.current||gen!==detailEpoch.current||life!==lifecycle.current||!current())return;if(result.shipmentId!==selected.shipmentId||result.evidenceId!==selected.proof!.evidenceId)throw Error('Different proof');setProofCheck(result);}catch{if(epoch===checkEpoch.current&&gen===detailEpoch.current&&life===lifecycle.current&&current()){clearProtected();setError('The current proof could not be authorised for checking. Refresh your shipments.');}}finally{if(epoch===checkEpoch.current&&current())setChecking(false);}}
- return <section className="customer-shipments-view"><header className="co-view-heading"><div><span className="co-eyebrow">Your deliveries</span><h2>Your shipments</h2><p>Follow the latest progress and download your delivery proof.</p></div></header>
-  <details className="co-help"><summary>About shipment updates</summary><p>Only shipments shared with your account appear here. Updates refresh every 30 seconds while visible. A shared location is the latest submitted point during active delivery.</p></details>
-  {error&&<p role="alert" className="error">{error}</p>}<button disabled={loading} onClick={()=>void loadPage(0,null)}>Refresh shipments</button>
-  {loading?<p role="status">Loading your shipment page…</p>:page&&page.rows.length?<section className="customer-shipments" aria-label="Shared shipments">{page.rows.map(row=><article className="customer-shipment" key={row.shipmentId}><div><h2>{row.reference||'Reference unavailable'}</h2><OrderBadge status={row.status}/><p>Expected {row.expectedDelivery??'date unavailable'}</p></div><button aria-label={`View customer shipment ${row.shipmentId}`} onClick={()=>routing?routing.go('customer',row.shipmentId):void loadDetail(row.shipmentId)}>View shipment</button></article>)}</section>:page?<section className="customer-card"><h2>No shared shipments on this page</h2><p>The IILAS team must grant access to each shipment. Other customers’ shipments are not available.</p></section>:<section className="customer-card"><h2>Shipment list unavailable</h2><p>Refresh your access to check the current shared shipments.</p></section>}
-  <nav className="customer-actions" aria-label="Shipment pages"><button disabled={loading||pageIndex===0} onClick={()=>void loadPage(pageIndex-1,cursors[pageIndex-1]??null)}>Previous shipment page</button><button disabled={loading||!page?.hasMore} onClick={()=>void loadPage(pageIndex+1,page?.cursor??null)}>Next shipment page</button><span>Page {pageIndex+1} · Up to 20 active grants checked per page.</span></nav>
-  {page&&<p className="customer-caption">Access last checked {time(page.observedAtMs)}. {page.hasMore?'More grants may exist; use the next page.':'This is the end of this page sequence.'}</p>}
-  {(!routed||routeId)&&detailLoading&&<p role="status">Checking shipment access…</p>}
-  {detail&&<section className="customer-card" aria-label="Selected shipment"><div className="customer-detail-heading"><h2 ref={heading} tabIndex={-1}>Shipment details</h2><button onClick={closeDetails}>Close shipment details</button></div><h3>{detail.reference||'Reference unavailable'}</h3><OrderBadge status={detail.status}/><p>Expected delivery: {detail.expectedDelivery??'date unavailable'}. Observed {time(detail.observedAtMs)}.</p><button disabled={detailLoading} onClick={()=>void loadDetail(detail.shipmentId)}>Refresh shipment details</button>
-   <h3>Delivery updates</h3><p>{detail.timeline.coverage}</p>{detail.timeline.rows.length?<ol className="customer-timeline">{detail.timeline.rows.map((event,i)=><li key={i}><b>{event.status}</b><span>{time(event.atMs)}</span></li>)}</ol>:<p>No timestamped updates are available in this view.</p>}
-   {detail.location&&<section><h3>Latest submitted location</h3><p>Received by IILAS {time(detail.location.submittedAtMs)}. {detail.location.capturedAtMs!==undefined&&<>Captured {time(detail.location.capturedAtMs)}. {detail.observedAtMs-detail.location.capturedAtMs>120000?'This saved observation is over two minutes old. ':''}</>}Accuracy {detail.location.accuracy} m. This is a submitted observation, not continuous tracking.</p><MapContainer key={detail.shipmentId+':'+detail.location.submittedAtMs} center={[detail.location.latitude,detail.location.longitude]} zoom={13} className="customer-location-map" scrollWheelZoom={false} zoomAnimation={false} fadeAnimation={false} markerZoomAnimation={false}><TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/><Marker position={[detail.location.latitude,detail.location.longitude]} icon={L.divIcon({className:'location-marker',html:'●',iconSize:[20,20]})}><Popup>Latest shared submitted point</Popup></Marker></MapContainer></section>}
-   <h3>Current proof of delivery</h3>{detail.proof?<><p>{detail.proof.fileName} · {detail.proof.bytes.toLocaleString()} bytes</p><div className="co-actions"><button className="co-primary" disabled={downloading} onClick={()=>void downloadProof()}>Download current proof</button><button disabled={checking} onClick={()=>void checkIntegrity()}>{checking?'Checking proof…':'Check proof integrity'}</button></div>{proofCheck&&<div className="co-proof-result" role="status"><OrderBadge status={proofCheck.outcome}/><p>{proofCheck.outcome==='Verified'?'The current proof matches its registered hash.':proofCheck.outcome==='NotRegistered'?'This proof has not been registered. The IILAS team can register it.':proofCheck.outcome==='Unmatched'?'The check found a mismatch. Contact the IILAS team.':'A current check is unavailable. Refresh and try again.'}</p><small>Checked {time(proofCheck.checkedAtMs)}</small></div>}</>:<p>No eligible current proof is available for download.</p>}<details className="co-help"><summary>About proof access</summary><p>Access is checked again for each download. Revoking access blocks later requests; downloaded files cannot be recalled.</p></details>
+ return <section className="customer-shipments-view">
+  <header className="co-view-heading">
+   <div><h2>Delivery monitoring</h2><p>Track your shipments, check delivery updates and view saved proof.</p></div>
+  </header>
+  {error&&<p role="alert" className="error">{error}</p>}
+  {!showingShipment&&<>
+   <div className="customer-monitor-heading"><h3>Your shipments</h3><button disabled={loading} onClick={()=>void loadPage(0,null)}>Refresh shipments</button></div>
+   {loading?<p role="status">Loading your shipment page…</p>:page&&page.rows.length?
+    <section className="customer-shipments" aria-label="Shared shipments">
+     {page.rows.map(row=><article className="customer-shipment" key={row.shipmentId}>
+      <div><h4>{row.reference||'Reference unavailable'}</h4><OrderBadge status={row.status}/><p>Expected {row.expectedDelivery??'date unavailable'}</p></div>
+      <button aria-label={`View customer shipment ${row.shipmentId}`} onClick={()=>routing?routing.go('customer',row.shipmentId):void loadDetail(row.shipmentId)}>View customer shipment</button>
+     </article>)}
+    </section>:page?<section className="customer-card"><h4>No shared shipments on this page</h4><p>Shipments appear here once the IILAS team shares access with your account.</p></section>:
+    <section className="customer-card"><h4>Shipment list unavailable</h4><p>Refresh your shipments to check your current access.</p></section>}
+   <nav className="customer-actions" aria-label="Shipment pages">
+    <button disabled={loading||pageIndex===0} onClick={()=>void loadPage(pageIndex-1,cursors[pageIndex-1]??null)}>Previous shipment page</button>
+    <button disabled={loading||!page?.hasMore} onClick={()=>void loadPage(pageIndex+1,page?.cursor??null)}>Next shipment page</button>
+    <span>Page {pageIndex+1} · Up to 20 active grants checked per page.</span>
+   </nav>
+   {page&&<p className="customer-caption">Access last checked {time(page.observedAtMs)}.</p>}
+  </>}
+  {showingShipment&&!detail&&<button onClick={closeDetails}>Close shipment details</button>}
+  {showingShipment&&detailLoading&&!detail&&<p role="status">Checking shipment access…</p>}
+  {detail&&<section aria-label="Selected shipment" className="customer-delivery-monitor">
+   <div className="customer-card">
+    <div className="customer-detail-heading">
+     <h2 ref={heading} tabIndex={-1}>Shipment details</h2>
+     <button onClick={closeDetails}>Close shipment details</button>
+    </div>
+    <div className="customer-monitor-heading"><h3>{detail.reference||'Reference unavailable'}</h3><OrderBadge status={detail.status}/></div>
+    <p>Expected delivery {detail.expectedDelivery??'date unavailable'}</p>
+    <div className="customer-actions">
+     <button disabled={detailLoading} onClick={()=>void loadDetail(detail.shipmentId)}>Refresh shipment details</button>
+     <span className="customer-caption">Last checked {time(detail.observedAtMs)}</span>
+    </div>
+   </div>
+   <div className="customer-monitor-grid">
+    <section className="customer-card">
+     <h3>Delivery updates</h3>
+     {detail.timeline.rows.length?<ol className="customer-timeline">
+      {detail.timeline.rows.map((event,i)=><li key={i}><b>{event.status}</b><span>{time(event.atMs)}</span></li>)}
+     </ol>:<p>No timestamped updates are available yet.</p>}
+     <p className="customer-caption">{detail.timeline.coverage} The monitor refreshes every 30 seconds while visible.</p>
+    </section>
+    <div className="customer-monitor-side">
+     <section className="customer-card">
+      <h3>{detail.location?'Latest submitted location':'Delivery location'}</h3>
+      {detail.location?<><p>Received by IILAS {time(detail.location.submittedAtMs)}. {detail.location.capturedAtMs!==undefined&&<>Captured {time(detail.location.capturedAtMs)}. {detail.observedAtMs-detail.location.capturedAtMs>120000?'This saved observation is over two minutes old. ':''}</>}Accuracy {detail.location.accuracy} m.</p>
+       <MapContainer key={detail.shipmentId+':'+detail.location.submittedAtMs} center={[detail.location.latitude,detail.location.longitude]} zoom={13} className="customer-location-map" scrollWheelZoom={false} zoomAnimation={false} fadeAnimation={false} markerZoomAnimation={false}>
+        <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
+        <Marker position={[detail.location.latitude,detail.location.longitude]} icon={L.divIcon({className:'location-marker',html:'●',iconSize:[20,20]})}><Popup>Latest shared submitted point</Popup></Marker>
+       </MapContainer></>:<p>No location is currently shared for this delivery.</p>}
+     </section>
+     <section className="customer-card">
+      <h3>Current proof of delivery</h3>
+      {detail.proof?<>
+       {isProofImage(detail.proof.contentType)?
+        <CustomerProofPhoto key={JSON.stringify([detail.shipmentId,detail.proof.evidenceId,detail.proof.contentType,detail.proof.bytes,detail.proof.fileName])} shipmentId={detail.shipmentId} proof={detail.proof} customerUid={profile.uid} isCurrent={current}/>:
+        <p>{detail.proof.fileName} · PDF</p>}
+       <div className="co-actions">
+        <button className="co-primary" disabled={downloading} onClick={()=>void downloadProof()}>Download current proof</button>
+        <button disabled={checking} onClick={()=>void checkIntegrity()}>{checking?'Checking proof…':'Check proof integrity'}</button>
+       </div>
+       {proofCheck&&<div className="co-proof-result" role="status"><OrderBadge status={proofCheck.outcome}/><p>{proofCheck.outcome==='Verified'?'The current proof matches its registered hash.':proofCheck.outcome==='NotRegistered'?'This proof has not been registered. The IILAS team can register it.':proofCheck.outcome==='Unmatched'?'The check found a mismatch. Contact the IILAS team.':'A current check is unavailable. Refresh and try again.'}</p><small>Checked {time(proofCheck.checkedAtMs)}</small></div>}
+      </>:<p>The current proof appears here once the delivery is complete and the proof is shared.</p>}
+     </section>
+    </div>
+   </div>
   </section>}
  </section>;
+}
+
+function CustomerProofPhoto({shipmentId, proof, customerUid, isCurrent}: {shipmentId: string; proof: CustomerProof; customerUid: string; isCurrent: () => boolean}) {
+ const {evidenceId, fileName, contentType, bytes} = proof;
+ const load = useCallback(async (signal: AbortSignal) => {
+  const user = auth?.currentUser;
+  if (!user) throw Error('Proof access is unavailable.');
+  return fetchCustomerProof({
+   user, customerUid, shipmentId, proof: {evidenceId, fileName, contentType, bytes},
+   environment: demoEnvironment, siteUrl: window.location.href, isCurrent, signal,
+  });
+ }, [customerUid, shipmentId, evidenceId, fileName, contentType, bytes, isCurrent]);
+ return <SavedProofImage fileName={fileName} contentType={contentType} bytes={bytes} load={load}/>;
 }

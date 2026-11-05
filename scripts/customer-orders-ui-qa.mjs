@@ -153,8 +153,8 @@ try{await (async()=>{
  const hub=await fetch('http://127.0.0.1:4400/emulators').then(r=>r.json());for(const name of ['auth','firestore','functions'])assert.equal(hub[name]?.host,'127.0.0.1','Use only the existing explicit loopback emulator stack.');
  await mkdir(output,{recursive:true});browser=await chromium.launch({channel:'msedge',headless:true});
  const customer=await newContext('customer');
- await check('Customer Orders and Shipments remain isolated from the staff application',async()=>{
-  await (await named(customer.page,'Orders')).waitFor();await (await named(customer.page,'Shipments')).waitFor();
+ await check('Customer Orders and the Delivery monitor remain isolated from the staff application',async()=>{
+  await (await named(customer.page,'Orders')).waitFor();await (await named(customer.page,'Delivery monitor')).waitFor();
   assert.equal(await customer.page.getByRole('navigation',{name:'Primary navigation',exact:true}).count(),0);
   assert.equal(await customer.page.getByText('Product Management',{exact:true}).count(),0);await click(customer.page,'Orders');
   await customer.page.waitForURL(origin+'/customer/orders');await customer.page.waitForFunction(()=>{const root=document.querySelector('.co-workspace');return root&&!root.textContent.includes('Loading your orders')&&Boolean(root.querySelector('.co-order-list,.co-empty'));});await fit(customer.page,'customer-orders');

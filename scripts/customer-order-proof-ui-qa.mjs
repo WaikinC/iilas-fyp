@@ -30,12 +30,42 @@ try{
  const sourceBefore=await sourceSnapshots(logistics);
  const context=await command(logistics,'getCustomerAccessContext',{customerUid:fixture.actors.customer,shipmentId});assert.equal(context.shipment.id,shipmentId);assert.equal(context.customer.uid,fixture.actors.customer);assert.equal(context.customer.eligible,true);
  if(!context.grant.active||context.grant.shareLocation){const operation={operationId:randomUUID(),customerUid:fixture.actors.customer,shipmentId,expectedVersion:context.grant.version,shareLocation:false,notes:'Explicit fictional completed-shipment access for Customer proof button QA.'};await writeFile(join(output,'grant-operation.private.json'),JSON.stringify(operation,null,2));grantOutcome=await command(logistics,'grantCustomerShipment',operation);assert.equal(grantOutcome.state,'Completed');}else grantOutcome={reusedExplicitGrant:true,version:context.grant.version};checks.push('explicit fictional current shipment grant with location sharing off');
- const customer=await login('customer');await customer.goto(origin+'/customer/shipments/'+shipmentId);await customer.getByRole('heading',{name:'Shipment details',exact:true}).waitFor({timeout:20000});
+ const customer=await login('customer');
+ const previewResponse=customer.waitForResponse(response=>response.url().includes('/customerEvidence?')&&response.request().method()==='GET');
+ await customer.goto(origin+'/customer/shipments/'+shipmentId);
+ await customer.getByRole('heading',{name:'Shipment details',exact:true}).waitFor({timeout:20000});
+ const binary=await previewResponse;
+ assert.equal(binary.status(),200);
+ assert.match(binary.headers()['cache-control'],/no-store/);
+ assert.equal(binary.headers()['content-type'],'image/png');
+ const photo=customer.getByRole('img',{name:'Saved proof of delivery',exact:true});
+ await photo.waitFor({timeout:20000});
+ assert.equal(await photo.evaluate(img=>img.src.startsWith('blob:')&&img.naturalWidth===2&&img.naturalHeight===2),true);
+ checks.push('granted Customer decodes the saved PNG from the actual protected proof endpoint');
  const proof=await command(customer,'getCustomerShipment',{shipmentId});assert.equal(proof.status,'Delivered');assert.equal(proof.location,null);assert.equal(proof.proof.evidenceId,evidenceId);await customer.getByRole('button',{name:'Download current proof',exact:true}).waitFor();
  const responsePromise=customer.waitForResponse(response=>requestData(response.request())?.action==='checkCustomerProofIntegrity');await customer.getByRole('button',{name:'Check proof integrity',exact:true}).click();const response=await responsePromise;assert.equal(response.status(),200);const request=requestData(response.request());assert.deepEqual(request.input,{shipmentId,evidenceId});const raw=await response.json(),result=raw.result??raw.data;assert.deepEqual(Object.keys(result).sort(),['checkedAtMs','evidenceId','outcome','shipmentId']);assert.equal(result.shipmentId,shipmentId);assert.equal(result.evidenceId,evidenceId);assert.equal(result.outcome,'Unavailable');assert(Number.isSafeInteger(result.checkedAtMs));
  const status=customer.locator('.co-proof-result[role="status"]');await status.getByText('Unavailable',{exact:true}).waitFor();await status.getByText('A current check is unavailable. Refresh and try again.',{exact:true}).waitFor();assert(!JSON.stringify(result).includes(fixture.scope));assert(!await customer.locator('body').innerText().then(text=>/0x[a-fA-F0-9]{40,64}|transactionHash|deploymentGeneration|referenceHash|authorisedWallet|sourceVersion/.test(text)));checks.push('actual Functions proof command displays honest Unavailable without chain metadata');
  for(const width of [1440,390,320]){await customer.setViewportSize({width,height:width===1440?1000:900});await customer.evaluate(()=>window.scrollTo(0,0));assert.equal(await customer.locator('input[type="password"]').count(),0);assert.equal(await customer.evaluate(()=>Math.max(0,document.documentElement.scrollWidth-innerWidth)),0);await customer.screenshot({path:join(output,'customer-proof-unavailable-'+width+'.png'),fullPage:true});}checks.push('proof result is readable at desktop and narrow widths');
  const sourceAfter=await sourceSnapshots(logistics);assert(JSON.stringify(sourceAfter)===JSON.stringify(sourceBefore),'The registered fictional proof, shipment, delivery, handover and stock source must remain unchanged.');checks.push('exact proof and fulfillment sources and product stock remain unchanged');
+ const gate=Promise.withResolvers();
+ const held=customer.waitForRequest(request=>requestData(request)?.action==='getCustomerShipment');
+ await customer.route('**/command',async route=>{
+  if(requestData(route.request())?.action!=='getCustomerShipment')return route.fallback();
+  await gate.promise;
+  await route.continue();
+ });
+ try{
+  await customer.getByRole('button',{name:'Refresh shipment details',exact:true}).click();
+  await held;
+  await customer.getByRole('button',{name:'Close shipment details',exact:true}).click();
+  await customer.waitForURL(origin+'/customer');
+  await customer.getByRole('heading',{name:'Your shipments',exact:true}).waitFor();
+  const retired=customer.waitForResponse(response=>requestData(response.request())?.action==='getCustomerShipment');
+  gate.resolve();
+  assert.equal((await retired).status(),200);
+  assert.equal(await photo.count(),0);
+  checks.push('closing during a refresh returns to the list and retires the image');
+ }finally{gate.resolve();await customer.unroute('**/command');}
  assert.equal(commandCalls.filter(call=>call.action==='checkCustomerProofIntegrity').length,1);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
  await writeFile(join(output,'result.private.json'),JSON.stringify({passed:true,actualApplication:true,actualFunctions:true,checks,shipmentId,evidenceId,grantOutcome,proofOutcome:result.outcome,sourceAndStockUnchanged:true,noCloud:true,noWallet:true,commandCalls},null,2));console.log(JSON.stringify({passed:true,checks:checks.length,output}));
 }catch(error){await mkdir(output,{recursive:true});await writeFile(join(output,'result.private.json'),JSON.stringify({passed:false,checks,message:redact(error.message),errors,unexpected},null,2));console.error(JSON.stringify({passed:false,checks:checks.length,message:redact(error.message),output}));process.exitCode=1;}

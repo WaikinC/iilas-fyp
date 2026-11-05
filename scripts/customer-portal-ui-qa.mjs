@@ -5,15 +5,18 @@ import {randomUUID} from 'node:crypto';
 for(const file of ['src/features/customer/CustomerPortal.tsx','src/features/operations/CustomerShipmentAccess.tsx'])await access(new URL('../'+file,import.meta.url));
 const require=createRequire(import.meta.url),{chromium}=require(process.env.IILAS_PLAYWRIGHT_MODULE||'C:/Users/Home/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 const output='outputs/fyp-completion-20261025/customer-ui-'+randomUUID();await mkdir(output,{recursive:true});const browser=await chromium.launch({channel:'msedge',headless:true});
+const pdfProof=Buffer.from('%PDF-1.4\nOrdinary proof fixture.\n');
+const imageProof=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGMwTpsJRAwQCgAf7gTJ/qZDUgAAAABJRU5ErkJggg==','base64');
+const imageRequests=[];
 try{
- const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});await context.addInitScript(()=>{
+ const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});await context.addInitScript(({pdfBytes,imageBytes})=>{
   const staff=location.search.includes('staff'),uid=staff?'manager':'customer1',q=window.customerUI={profile:{uid,email:uid+'@example.test',displayName:staff?'Manager':'Customer One',emailVerified:true,role:staff?'Manager':'Customer',status:'Approved',active:true,version:1},user:null,subscriptions:[],staffMounts:0,calls:[],mode:'ok',receipts:{},grantVersion:0,grantActive:false,shareLocation:false,createdUrls:[],revokedUrls:[],gpsCalls:0};
   q.user={uid,email:q.profile.email,emailVerified:true,reload:async()=>{},getIdToken:async()=> 'fixture.header.signature'};q.activeWorkspace=staff?{...q.profile,workspaceId:'scope'}:null;
   q.command=async(action,input={})=>{
    q.calls.push({action,input});if(action==='registerAccount')return {initialized:true};
    if(action==='getCustomerShipments'){const start=input.cursor?20:0,rows=q.mode==='revoked'?[]:Array.from({length:input.cursor?1:20},(_,i)=>({shipmentId:'s'+(start+i),reference:'DEMO-'+(start+i),expectedDelivery:'2026-10-25',status:'Delivered'}));return {rows,cursor:rows.length===20?'fixture_cursor':null,hasMore:rows.length===20,observedAtMs:Date.now(),scanned:rows.length};}
    if(action==='getCustomerShipment'){
-    if(q.mode==='revoked')throw Error('Access unavailable');const result={shipmentId:input.shipmentId,reference:'DEMO-'+input.shipmentId.slice(1),expectedDelivery:'2026-10-25',status:q.shareLocation?'In Transit':'Delivered',timeline:{rows:[{status:'Delivered',atMs:1000000},{status:'In Transit',atMs:900000}],hasMore:false,coverage:'Latest up to 20 timestamped updates only.'},location:q.shareLocation?{latitude:0,longitude:101,accuracy:4,submittedAtMs:1000000}:null,proof:q.shareLocation?null:{evidenceId:'proof1',fileName:'Proof.pdf',contentType:'application/pdf',bytes:new TextEncoder().encode('%PDF-1.4\nOrdinary proof fixture.\n').byteLength},observedAtMs:Date.now()};if(q.mode==='defer')return new Promise(resolve=>{q.releaseDetail=()=>resolve(result);});return q.mode==='bad-data'?{...result,ownerId:'private-scope'}:result;
+    if(q.mode==='revoked')throw Error('Access unavailable');const proof=q.imageProof?{evidenceId:'image-proof',fileName:'Proof.png',contentType:'image/png',bytes:imageBytes}:{evidenceId:'proof1',fileName:'Proof.pdf',contentType:'application/pdf',bytes:pdfBytes};const result={shipmentId:input.shipmentId,reference:'DEMO-'+input.shipmentId.slice(1),expectedDelivery:'2026-10-25',status:q.shareLocation?'In Transit':'Delivered',timeline:{rows:[{status:'Delivered',atMs:1000000},{status:'In Transit',atMs:900000}],hasMore:false,coverage:'Latest up to 20 timestamped updates only.'},location:q.shareLocation?{latitude:0,longitude:101,accuracy:4,submittedAtMs:1000000}:null,proof:q.shareLocation?null:proof,observedAtMs:Date.now()};if(q.mode==='defer')return new Promise(resolve=>{q.releaseDetail=()=>resolve(result);});return q.mode==='bad-data'?{...result,ownerId:'private-scope'}:result;
    }
    if(action==='getCustomerAccessContext')return {shipment:{id:input.shipmentId,reference:'DEMO-1',status:'Dispatched'},customer:{uid:input.customerUid,displayName:'Customer One',eligible:true},grant:{version:q.grantVersion,active:q.grantActive,shareLocation:q.shareLocation,notes:''}};
    if(q.receipts[input.operationId])return {...q.receipts[input.operationId],replayed:true};
@@ -22,23 +25,66 @@ try{
   };
   const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);URL.createObjectURL=blob=>{const url=create(blob);q.createdUrls.push(url);return url;};URL.revokeObjectURL=url=>{q.revokedUrls.push(url);return revoke(url);};
   navigator.geolocation.getCurrentPosition=()=>{q.gpsCalls++;throw Error('Customers must not capture GPS');};
- });
+ },{pdfBytes:pdfProof.length,imageBytes:imageProof.length});
  await context.route('**/lib/firebase.js*',r=>r.fulfill({contentType:'text/javascript',body:'export const demoEnvironment={"schema":"iilas-demo-environment-1.0","mode":"local-emulator","projectId":"fyp-inventory-and-logistics","storageBucket":"fyp-inventory-and-logistics.firebasestorage.app","functionsRegion":"asia-southeast1","webOrigins":["http://127.0.0.1:5173","http://localhost:5173"]};export const db={};export const auth={get currentUser(){return window.customerUI.user;}};'}));
  await context.route('**/lib/firebaseRuntime.js*',r=>r.fulfill({contentType:'text/javascript',body:'export const auth={get currentUser(){return window.customerUI.user;}};export const projectId="fyp-inventory-and-logistics";export const demoEnvironment={mode:"local-emulator"};export const sessionRecoveryStorage={getItem:k=>sessionStorage.getItem(k),setItem:(k,v)=>sessionStorage.setItem(k,v),removeItem:k=>sessionStorage.removeItem(k)};'}));
  await context.route('**/lib/workspace.js*',r=>r.fulfill({contentType:'text/javascript',body:'export const getActiveWorkspace=()=>window.customerUI.activeWorkspace;export const setActiveWorkspace=x=>window.customerUI.activeWorkspace=x;export const workspaceCommand=(a,i)=>window.customerUI.command(a,i);'}));
  await context.route('**/firebase_auth.js*',r=>r.fulfill({contentType:'text/javascript',body:'export const sendEmailVerification=async()=>{};export const signOut=async()=>{window.customerUI.user=null;window.customerUI.changed();};'}));
  await context.route('**/firebase_firestore.js*',r=>r.fulfill({contentType:'text/javascript',body:"export const doc=(_,kind,id)=>({kind,id});export const onSnapshot=(ref,next)=>{const q=window.customerUI;q.subscriptions.push(ref);if(ref.kind==='users'){q.profileChanged=()=>next({exists:()=>true,data:()=>({...q.profile})});queueMicrotask(q.profileChanged);}else if(ref.kind==='system')queueMicrotask(()=>next({data:()=>({dataScopeId:'scope'})}));return()=>{};};"}));
- await context.route('http://127.0.0.1:5001/**/customerEvidence?*',async route=>{const request=route.request();assert(!request.url().includes('fixture.header.signature'));if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'http://127.0.0.1:5173','Access-Control-Allow-Methods':'GET','Access-Control-Allow-Headers':'Authorization'}});assert.equal(request.headers().authorization,'Bearer fixture.header.signature');return route.fulfill({status:200,contentType:'application/pdf',headers:{'Access-Control-Allow-Origin':'http://127.0.0.1:5173','Cache-Control':'no-store'},body:'%PDF-1.4\nOrdinary proof fixture.\n'});});
+ await context.route('http://127.0.0.1:5001/**/customerEvidence?*',async route=>{
+  const request=route.request();assert(!request.url().includes('fixture.header.signature'));
+  if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'http://127.0.0.1:5173','Access-Control-Allow-Methods':'GET','Access-Control-Allow-Headers':'Authorization'}});
+  assert.equal(request.headers().authorization,'Bearer fixture.header.signature');
+  const {searchParams}=new URL(request.url()),isImage=searchParams.get('evidenceId')==='image-proof';
+  if(isImage)imageRequests.push(searchParams.get('shipmentId'));
+  return route.fulfill({status:200,contentType:isImage?'image/png':'application/pdf',headers:{'Access-Control-Allow-Origin':'http://127.0.0.1:5173','Cache-Control':'no-store'},body:isImage?imageProof:pdfProof});
+ });
  await context.route('**.tile.openstreetmap.org/**',r=>r.fulfill({status:204,body:''}));
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.stack||e.message));await page.goto('http://127.0.0.1:5173/scripts/fixtures/customer-portal-ui/harness.html');await page.getByRole('heading',{name:'Your shipments',exact:true}).waitFor({timeout:12000}).catch(error=>{console.log('Browser errors',JSON.stringify(errors));throw error;});
  await page.getByRole('button',{name:'Next shipment page',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:/View customer shipment /}).count(),20);assert.equal(await page.evaluate(()=>window.customerUI.staffMounts),0);assert(await page.evaluate(()=>window.customerUI.subscriptions.every(r=>r.kind==='users'&&r.id==='customer1')));assert.equal(await page.evaluate(()=>window.customerUI.activeWorkspace),null);
  await page.getByRole('button',{name:'Next shipment page',exact:true}).click();assert.equal(await page.getByRole('button',{name:/View customer shipment /}).count(),1);await page.getByRole('button',{name:'Previous shipment page',exact:true}).click();await page.getByRole('button',{name:/View customer shipment /}).first().click();await page.getByRole('heading',{name:'Shipment details',exact:true}).waitFor();assert.equal(await page.getByText(/private-scope/).count(),0);assert.equal(await page.getByText(/Latest submitted location/).count(),0);
  const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download current proof',exact:true}).click()]);assert.equal(download.suggestedFilename(),'Proof.pdf');await page.waitForFunction(()=>window.customerUI.revokedUrls.length===window.customerUI.createdUrls.length&&window.customerUI.createdUrls.length===1);
+ const savedImage=page.getByRole('img',{name:'Saved proof of delivery',exact:true});
+ assert.equal(await savedImage.count(),0,'PDF proof remains download-only');
+ await page.evaluate(()=>window.customerUI.imageProof=true);
+ const refreshDetail=page.getByRole('button',{name:'Refresh shipment details',exact:true});
+ await refreshDetail.click();await savedImage.waitFor({timeout:6000});await savedImage.scrollIntoViewIfNeeded();
+ await page.waitForFunction(()=>document.querySelector('img[alt="Saved proof of delivery"]')?.naturalWidth===2);
+ const firstPreview=await savedImage.getAttribute('src');
+ assert(firstPreview?.startsWith('blob:'));assert.deepEqual(imageRequests,['s0']);
+ await page.getByRole('button',{name:'Delivery monitor',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'Delivery monitoring',exact:true}).waitFor();
+ await page.setViewportSize({width:390,height:900});await savedImage.scrollIntoViewIfNeeded();
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.screenshot({path:output+'/customer-saved-image-narrow.png'});
+ await page.setViewportSize({width:1440,height:1000});
+ const detailReads=await page.evaluate(()=>window.customerUI.calls.filter(call=>call.action==='getCustomerShipment').length);
+ await refreshDetail.click();
+ await page.waitForFunction(count=>window.customerUI.calls.filter(call=>call.action==='getCustomerShipment').length>count,detailReads);
+ await savedImage.waitFor();
+ assert.equal(await savedImage.getAttribute('src'),firstPreview,'An unchanged proof keeps its preview on refresh');
+ assert.deepEqual(imageRequests,['s0']);
+ await page.getByRole('button',{name:'Close shipment details',exact:true}).click();
+ await savedImage.waitFor({state:'detached'});
+ await page.waitForFunction(url=>window.customerUI.revokedUrls.includes(url),firstPreview);
+ await page.getByRole('button',{name:'View customer shipment s0',exact:true}).click();
+ await savedImage.waitFor();
+ const secondPreview=await savedImage.getAttribute('src');
+ assert(secondPreview&&secondPreview!==firstPreview);
+ assert.deepEqual(imageRequests,['s0','s0'],'Reopening authorizes and reads the saved proof again');
+ await page.evaluate(()=>window.customerUI.mode='revoked');await refreshDetail.click();
+ await page.getByRole('alert').waitFor();await savedImage.waitFor({state:'detached'});
+ await page.waitForFunction(url=>window.customerUI.revokedUrls.includes(url),secondPreview);
+ assert(await page.evaluate(()=>window.customerUI.calls.every(({action})=>['registerAccount','getCustomerShipments','getCustomerShipment'].includes(action))));
+ await page.evaluate(()=>{window.customerUI.mode='ok';window.customerUI.imageProof=false;});
+ await page.getByRole('button',{name:'Refresh shipments',exact:true}).click();
+ await page.getByRole('button',{name:'View customer shipment s0',exact:true}).click();
+ await refreshDetail.waitFor();
  await page.evaluate(()=>window.customerUI.shareLocation=true);await page.getByRole('button',{name:'Refresh shipment details',exact:true}).click();await page.getByText(/Latest submitted location/).waitFor();assert.equal(await page.evaluate(()=>window.customerUI.gpsCalls),0);assert.equal(await page.getByRole('button',{name:'Download current proof',exact:true}).count(),0);
  await page.locator('.customer-location-map').scrollIntoViewIfNeeded();await page.screenshot({path:output+'/customer-desktop.png'});await page.setViewportSize({width:390,height:900});await page.locator('.customer-location-map').scrollIntoViewIfNeeded();await page.screenshot({path:output+'/customer-narrow.png'});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.evaluate(()=>window.customerUI.mode='revoked');await page.getByRole('button',{name:'Refresh shipment details',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await page.getByRole('heading',{name:'Shipment details',exact:true}).count(),0);assert.equal(await page.getByText(/Latest submitted location/).count(),0);
  await page.evaluate(()=>{window.customerUI.mode='ok';window.customerUI.shareLocation=false;});await page.getByRole('button',{name:'Refresh shipments',exact:true}).click();await page.getByRole('button',{name:/View customer shipment /}).first().click();await page.getByRole('heading',{name:'Shipment details',exact:true}).waitFor();await page.evaluate(()=>window.customerUI.mode='bad-data');await page.getByRole('button',{name:'Refresh shipment details',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await page.getByText('private-scope',{exact:false}).count(),0);await page.evaluate(()=>window.customerUI.mode='ok');await page.getByRole('button',{name:'Refresh shipments',exact:true}).click();await page.getByRole('button',{name:/View customer shipment /}).first().click();await page.getByRole('heading',{name:'Shipment details',exact:true}).waitFor();await page.evaluate(()=>window.customerUI.mode='defer');await page.getByRole('button',{name:'Refresh shipment details',exact:true}).click();await page.waitForFunction(()=>Boolean(window.customerUI.releaseDetail));
  await page.evaluate(()=>{window.customerUI.profile.active=false;window.customerUI.profile.status='Disabled';window.customerUI.profileChanged();});await page.getByRole('heading',{name:'Account access disabled',exact:true}).waitFor();await page.evaluate(()=>window.customerUI.releaseDetail());assert.equal(await page.getByRole('heading',{name:'Your shipments',exact:true}).count(),0);
  await page.goto('http://127.0.0.1:5173/scripts/fixtures/customer-portal-ui/harness.html?staff');await page.getByRole('heading',{name:'Customer shipment access',exact:true}).waitFor();await page.getByLabel('Access shipment',{exact:true}).selectOption('s1');await page.getByLabel('Customer account ID',{exact:true}).fill('customer1');await page.getByRole('button',{name:'Check customer access',exact:true}).click();await page.getByText('Customer One',{exact:true}).waitFor();assert.equal(await page.getByLabel('Share latest active-delivery location',{exact:true}).isChecked(),false);await page.getByLabel('Customer access notes',{exact:true}).fill('Explicit demo access to this shipment only.');await page.evaluate(()=>window.customerUI.mode='lost');await page.getByRole('button',{name:'Grant shipment access',exact:true}).click();await page.getByRole('button',{name:'Retry saved customer grant',exact:true}).waitFor();await page.getByRole('button',{name:'Retry saved customer grant',exact:true}).click();await page.getByText('Current grant version 1',{exact:true}).waitFor();await page.getByRole('button',{name:'Revoke shipment access',exact:true}).click();await page.getByText('Current grant version 2',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.customerUI.grantActive),false);
- assert.deepEqual(errors,[]);await writeFile(output+'/result.json',JSON.stringify({passed:true,softwareFixturesOnly:true,checks:18,staffSubscriptionsForCustomer:0},null,2));console.log(JSON.stringify({passed:true,checks:18,output}));
+ assert.deepEqual(errors,[]);await writeFile(output+'/result.json',JSON.stringify({passed:true,softwareFixturesOnly:true,checks:24,staffSubscriptionsForCustomer:0},null,2));console.log(JSON.stringify({passed:true,checks:24,output}));
 }finally{await browser.close();}

@@ -7,8 +7,9 @@ This extension is local development work. The hosted Firebase application contin
 1. Sign in as an approved Customer. The Customer portal is separate from staff modules. Open **Orders**, then **New order request**.
 2. Enter recipient, contact phone, full delivery address, today/future requested delivery date in Malaysia time, and 1–20 item descriptions with whole quantities from 1 to 10,000. An optional message helps staff identify the items. No inventory catalogue or stock balance is exposed.
 3. Submit once. The system creates a locked `ORD-` reference and shows **Awaiting review**. Request data is immutable; cancel an unaccepted request and submit a replacement if necessary.
-4. Open the order to see the team's decision/message. Once accepted, **View shipment** opens its private tracking page. Independently shared shipments remain under **Shipments**.
-5. When the current delivery is Delivered and has an eligible proof, download the proof or select **Check proof integrity**. The read-only check reports Verified, Not registered, Unmatched or Unavailable with the observation time. It cannot register hashes or disclose wallet/source metadata.
+4. Open the order to see the team's decision and message. Once accepted, **View shipment** opens the linked delivery in **Delivery monitor**. You can also track independently shared shipments from the monitor.
+5. Check the delivery status, expected date and timeline. The map shows the latest submitted location when staff have enabled sharing for that active delivery.
+6. Once the delivery is marked **Delivered**, the current JPG, PNG or WebP proof appears in the monitor. PDFs are available through **Download current proof**. **Check proof integrity** reports Verified, Not registered, Unmatched or Unavailable with the check time.
 
 Customer URLs: `/customer/orders`, `/customer/orders/new`, `/customer/orders/:id`; existing `/customer` and `/customer/shipments/:id` links remain valid. Customers cannot open staff routes or other customers' orders.
 
@@ -19,7 +20,7 @@ Customer URLs: `/customer/orders`, `/customer/orders/new`, `/customer/orders/:id
 3. Choose today/future expected delivery and optionally write a customer-facing message. Select **Accept, create shipment & share tracking**. Acceptance creates exactly one generated `SHP-` Draft, private tracking grant, permanent order linkage and recoverable decision receipt in one transaction. It does not reserve or deduct stock. Location sharing defaults off.
 4. Alternatively, write a reason and select **Reject request**. Rejection does not create a shipment or consume an SHP number.
 5. Select **Open linked shipment**. Follow the existing **Warehouse Operations → Picking → Packing → Handed over → Transport Management → Order & Dispatch → Review dispatch** flow. Existing reservation, resource-lock and dispatch accounting rules remain authoritative.
-6. Complete normal Delivery Monitoring and upload a fictional delivery proof when testing. Customer tracking projects only safe current facts. Staff must explicitly enable location sharing through the existing customer access controls if required; location collection itself remains a separate deliberate action.
+6. In Delivery Monitoring, open **Proof & parcel records** and save a delivery proof. The saved image appears after registration. Staff with access can also use **View saved image** on a previous proof. Mark the delivery **Delivered** with the intended proof to make it visible to the Customer with a shipment grant. Enable location sharing through the existing Customer access controls when appropriate.
 
 Deleting an eligible linked Draft is labelled **Cancel order & delete draft**. It cancels the accepted request, preserves its permanent linkage/tombstone and revokes tracking. Active warehouse or transport work still prevents deletion. Replaying the original acceptance cannot recreate a deleted shipment.
 

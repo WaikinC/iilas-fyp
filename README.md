@@ -12,7 +12,7 @@ The FYP web demonstration is available at [IILAS](https://fyp-inventory-and-logi
 
 ## Customer order requests (local development)
 
-The Customer portal now includes Orders and Shipments. Customers request items by description; Admin, Manager or Logistics staff review and match them in Order & Dispatch. Explicit acceptance creates one linked Draft shipment and private tracking access, then the existing warehouse, transport and dispatch workflow completes fulfilment. Customers can access only their own requests/shared shipments and check an eligible delivered proof without wallet registration. This extension is not yet published to the hosted website. See the [Customer workflow guide](docs/CUSTOMER_ORDERS_LOCAL_GUIDE_2026-11-04.md).
+The Customer portal includes Orders and a Delivery monitor. Customers request items by description. Admin, Manager or Logistics staff match them in Order & Dispatch and accept the request to create a linked shipment. The monitor shows delivery status, updates, any shared location and the current proof after delivery. Customers can view saved proof images, download proof files and check their integrity. [Customer workflow guide](docs/CUSTOMER_ORDERS_LOCAL_GUIDE_2026-11-04.md)
 
 ## What the app does
 

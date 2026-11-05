@@ -114,18 +114,20 @@ test('accepted Customer order follows existing held-bin handover, transport, dis
 
  await assert.rejects(call(driverUid,'delivery',{shipmentId:sid,version:1,status:'Delivered',notes:'Missing proof must reject.'}));
  const driverSession=await session(driverUid),customerSession=await session(customerUid),otherSession=await session(otherUid),{ref,uploadBytes,getBytes}=await import('firebase/storage');
- const evidenceId=randomUUID(),path=`evidence/${scope}/${sid}/${evidenceId}`,proofBytes=Buffer.from('%PDF-1.4\nFictional Customer-order fulfillment proof.\n%%EOF\n');
- await uploadBytes(ref(driverSession.storage,path),proofBytes,{contentType:'application/pdf',customMetadata:{actor:driverUid,stage:'Delivery',evidenceType:'Proof of Delivery',captureSource:'file',capturedAtClient:''}});
- const evidence=await call(driverUid,'registerEvidence',{id:evidenceId,shipmentId:sid,path,name:'Fictional-fulfillment-proof.pdf',type:'Proof of Delivery',stage:'Delivery',captureSource:'file',capturedAtClient:null});owned.evidence.push({id:evidenceId,path,sha256:sha(proofBytes)});assert.equal(evidence.sha256,sha(proofBytes));
+ const evidenceId=randomUUID(),path=`evidence/${scope}/${sid}/${evidenceId}`;
+ const proofBytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGMwTpsJRAwQCgAf7gTJ/qZDUgAAAABJRU5ErkJggg==','base64');
+ const fileName='Fictional-fulfillment-proof.png',contentType='image/png';
+ await uploadBytes(ref(driverSession.storage,path),proofBytes,{contentType,customMetadata:{actor:driverUid,stage:'Delivery',evidenceType:'Proof of Delivery',captureSource:'file',capturedAtClient:''}});
+ const evidence=await call(driverUid,'registerEvidence',{id:evidenceId,shipmentId:sid,path,name:fileName,type:'Proof of Delivery',stage:'Delivery',captureSource:'file',capturedAtClient:null});owned.evidence.push({id:evidenceId,path,sha256:sha(proofBytes)});assert.equal(evidence.sha256,sha(proofBytes));
  assert.equal((await customerShipment(sid)).proof,null);const beforeDelivered=await proofRequest(customerSession.auth,sid,evidenceId);assert.notEqual(beforeDelivered.status,200);
  await assert.rejects(getBytes(ref(customerSession.storage,path),1024),error=>error.code==='storage/unauthorized');checks.push('assigned Driver uploads and registers non-parcel proof while premature/direct Customer access refuses');
 
  await call(driverUid,'delivery',{shipmentId:sid,version:1,status:'Delivered',notes:'Fictional route completed with current proof.',proofId:evidenceId});
- customerDetail=await customerShipment(sid);assert.equal(customerDetail.status,'Delivered');assert.equal(customerDetail.location,null);assert.deepEqual(customerDetail.proof,{evidenceId,fileName:'Fictional-fulfillment-proof.pdf',contentType:'application/pdf',bytes:proofBytes.length});assertSafeShipment(customerDetail);
+ customerDetail=await customerShipment(sid);assert.equal(customerDetail.status,'Delivered');assert.equal(customerDetail.location,null);assert.deepEqual(customerDetail.proof,{evidenceId,fileName,contentType,bytes:proofBytes.length});assertSafeShipment(customerDetail);
  assert(customerDetail.timeline.rows.some(event=>event.status==='Delivered'));assert(customerDetail.timeline.rows.some(event=>event.status==='In Transit'));
  const deliveredOrder=await call(customerUid,'getCustomerOrder',{orderId:submitted.orderId});assert.equal(deliveredOrder.status,'Accepted');assert.equal(deliveredOrder.shipment.status,'Delivered');assert.equal(deliveredOrder.shipment.shipmentId,sid);
  for(const [kind,id] of [['vehicle',vehicle.id],['driver',driver.id]])assert.equal(await row('resourceAssignments',scope+'_'+kind+'_'+id),undefined);assert.equal((await row('transportPlans',sid)).status,'Completed');
- const downloaded=await proofRequest(customerSession.auth,sid,evidenceId);assert.equal(downloaded.status,200);assert.equal(downloaded.headers.get('content-type')?.split(';')[0],'application/pdf');assert.match(downloaded.headers.get('content-disposition')??'',/attachment/);assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),proofBytes);
+ const downloaded=await proofRequest(customerSession.auth,sid,evidenceId);assert.equal(downloaded.status,200);assert.equal(downloaded.headers.get('content-type')?.split(';')[0],contentType);assert.match(downloaded.headers.get('content-disposition')??'',/attachment/);assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),proofBytes);
  const foreignDownload=await proofRequest(otherSession.auth,sid,evidenceId);assert.notEqual(foreignDownload.status,200);assert.deepEqual(await row('products',productId),afterDispatch);checks.push('Delivered releases transport resources and serves only the current Customer proof');
 
  const lastLocation=await row('locations',sid);await assert.rejects(call(driverUid,'location',{shipmentId:sid,latitude:1,longitude:1,accuracy:5}));assert.deepEqual(await row('locations',sid),lastLocation);
