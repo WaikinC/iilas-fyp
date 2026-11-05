@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {dashboardSummary, inventoryTrend} from '../src/features/dashboard/dashboardData.ts';
+import {dashboardReviewAlerts, dashboardSummary, inventoryTrend} from '../src/features/dashboard/dashboardData.ts';
 
 const now = Date.parse('2026-10-09T10:00:00+08:00');
 const time = value => ({seconds: Date.parse(value) / 1000});
@@ -64,4 +64,57 @@ assert.deepEqual(trend.map(r=>r.key),['2026-05','2026-06','2026-07','2026-08','2
 assert.equal(trend.at(-1).stockIn,7);assert.equal(trend.at(-1).stockOut,2);
 assert.equal(trend.reduce((sum,r)=>sum+r.stockIn,0),7);
 assert.deepEqual(inventoryTrend([],Date.parse('2026-01-01T00:00:00+08:00')).map(r=>r.key),['2025-08','2025-09','2025-10','2025-11','2025-12','2026-01']);
+
+const scope='shared-test';
+const alertShipments=shipments.map(row=>({...row,reference:'REF-'+row.id}));
+const alertDeliveries=records.deliveries.map(row=>({...row,version:1}));
+const observation=(id,shipmentId,patch={})=>({
+  id,ownerId:scope,shipmentId,createdAt:stamp,observedAtMs:now-1000,
+  status:'Predicted',prediction:{label:'High'},reviewStatus:'Pending',requiresReview:true,
+  source:{
+    shipmentId,shipmentVersion:3,
+    deliveryVersion:alertDeliveries.find(row=>row.id===shipmentId)?.version??0,
+    currentStatus:alertDeliveries.find(row=>row.id===shipmentId)?.status??'Dispatched',
+  },
+  ...patch,
+});
+const exception=(id,patch={})=>({
+  id,ownerId:scope,kind:'delivery',recordId:'proof',outcome:'Unmatched',status:'Open',createdAt:stamp,...patch,
+});
+const reviewRecords={
+  deliveryAI:[
+    observation('old-high','active',{observedAtMs:now-2000}),
+    observation('current-low','active',{prediction:{label:'Low'},requiresReview:false}),
+    observation('current-high','delayed'),
+    observation('acknowledged-high','failed',{reviewStatus:'Acknowledge',requiresReview:false}),
+    observation('closed-high','delivered'),
+    observation('other-scope','delayed',{ownerId:'other-scope',observedAtMs:now}),
+    observation('stale-version','delayed',{observedAtMs:now,source:{shipmentId:'delayed',shipmentVersion:2,deliveryVersion:0,currentStatus:'Dispatched'}}),
+    observation('stale-progress','failed',{observedAtMs:now,source:{shipmentId:'failed',shipmentVersion:3,deliveryVersion:0,currentStatus:'Dispatched'}}),
+  ],
+  deliveryRules:[
+    observation('old-high-rules','active',{assessment:{level:'High'},observedAtMs:now-2000}),
+    observation('current-low-rules','active',{assessment:{level:'Low'},requiresReview:false}),
+    observation('current-rules','delayed',{assessment:{level:null,dataReviewRequired:true},reviewStatus:'NeedsFollowUp'}),
+    observation('closed-rules','returned',{assessment:{level:'High'}}),
+  ],
+  integrityExceptions:[
+    exception('open'),
+    exception('follow-up',{status:'NeedsFollowUp',kind:'inventory',outcome:'NotRegistered'}),
+    exception('acknowledged',{status:'Acknowledged'}),
+    exception('verified',{outcome:'Verified'}),
+    exception('other-scope',{ownerId:'other-scope'}),
+  ],
+};
+const review=dashboardReviewAlerts('Manager',scope,alertShipments,alertDeliveries,reviewRecords);
+assert.deepEqual(review.currentAI.map(row=>row.id).sort(),['acknowledged-high','current-high','current-low']);
+assert.deepEqual(review.highRisk.map(row=>row.id).sort(),['acknowledged-high','current-high']);
+assert.deepEqual(review.aiFollowUp.map(row=>row.reference),['REF-delayed']);
+assert.deepEqual(review.ruleFollowUp.map(row=>row.id),['current-rules','closed-rules']);
+assert.deepEqual(review.integrity.map(row=>row.id).sort(),['follow-up','open']);
+for(const role of ['Inventory','Warehouse','Logistics','Driver','Viewer','Customer']){
+  assert.deepEqual(dashboardReviewAlerts(role,scope,alertShipments,alertDeliveries,reviewRecords),{
+    currentAI:[],highRisk:[],aiFollowUp:[],ruleFollowUp:[],integrity:[],
+  });
+}
 console.log('Dashboard QA passed: stock availability, PO stages, delivery buckets, current predictions, human review, evidence registration and Malaysia monthly receipt/issue totals.');

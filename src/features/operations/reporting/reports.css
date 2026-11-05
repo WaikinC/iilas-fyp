@@ -52,6 +52,15 @@
 .reports-workspace .reports-definition{background:#f8fafc;padding:4px 16px;border:1px solid var(--reports-border);border-radius:8px;margin:20px 0}.reports-workspace .reports-definition p{font-size:13px;line-height:1.7;color:#475569}
 .reports-workspace .reports-records{margin-top:16px;min-width:0}.reports-workspace .reports-records>label{display:block;max-width:620px;font-size:14px;margin-bottom:16px}.reports-workspace .reports-records>label select{margin-top:6px}
 .reports-workspace .reports-records>.module-card{margin-top:14px}.reports-workspace .reports-tool-section{border:1px solid var(--reports-border);background:#fff;padding:16px;border-radius:10px;margin-top:16px}
+.stock-approval-row,.stock-approval-details{min-width:0;overflow-wrap:anywhere}
+.operations-row.stock-approval-row>div{flex:1 0 100%}
+.stock-approval-details{margin:16px 0;padding:16px;border:1px solid var(--reports-border);border-radius:8px;background:#f8fafc}
+.stock-approval-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px;margin:0 0 16px}
+.stock-approval-facts dt{font-size:13px;color:#475569}
+.stock-approval-facts dd{margin:2px 0 0;font-weight:600}
+.stock-approval-details h4{margin:16px 0 6px}
+.stock-approval-details ul{padding-inline-start:20px}
+.stock-approval-history li+li{margin-top:10px;padding-top:10px;border-top:1px solid var(--reports-border)}
 @media(max-width:1000px){.reports-workspace .reports-overview-graphs,.reports-workspace .reports-chart-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:600px){.reports-workspace .reports-stat-strip{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.reports-workspace .reports-stat-strip button{padding:14px}.reports-workspace .reports-stat-strip strong{font-size:24px}.reports-workspace .reports-overview-item,.reports-workspace .reports-chart-card{padding:14px}.reports-workspace .reports-overview-controls label{flex:1 1 120px}.reports-workspace .reports-overview-controls button,.reports-workspace .reports-filter-row button{width:100%}.reports-workspace .reports-plot{height:330px}.reports-workspace .reports-chart-legend{grid-template-columns:minmax(0,1fr)}.reports-workspace .reports-result-actions>button{width:100%}.reports-workspace .reports-tabs{gap:2px}.reports-workspace .reports-tabs button{padding:10px 12px}}
 @media(prefers-reduced-motion:reduce){.reports-workspace *{animation:none!important;transition:none!important}}

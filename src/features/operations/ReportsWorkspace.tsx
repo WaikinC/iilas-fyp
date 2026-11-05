@@ -1,4 +1,4 @@
-import {useState,type FormEvent} from 'react';
+import {useId,useState,type FormEvent} from 'react';
 import {REPORT_RESOURCES} from '../../../lib/reporting';
 import {statisticsSourceRequest,type StatisticsRequest} from '../../../lib/reportStatistics';
 import {workspaceCommand} from '../../../lib/workspace';
@@ -7,6 +7,7 @@ import type {DataRecord} from './Operations';
 import ReportExplorer from './ReportExplorer';
 import ResearchVerification from './ResearchVerification';
 import ReportsDashboard from './reporting/ReportsDashboard';
+import StockApprovalDetails from './reporting/StockApprovalDetails';
 import {useOperationPage,OperationPager} from './operationsData';
 export default function ReportsWorkspace(props:{member:Membership;products:DataRecord[];shipments:DataRecord[]}){const m=props.member;if(!m.active||m.status!=='Approved'||m.role==='Customer')return <p role="alert">Reports are unavailable for this account.</p>;return <ReportsBody key={`${m.uid}:${m.workspaceId}:${m.role}:${m.version}`} {...props}/>;}
 function ReportsBody({member,products,shipments}:{member:Membership;products:DataRecord[];shipments:DataRecord[]}){
@@ -18,4 +19,62 @@ function ReportsBody({member,products,shipments}:{member:Membership;products:Dat
  {member.role!=='Driver'&&choices.length>0&&<section className="reports-tool-section"><button aria-expanded={legacy} onClick={()=>setLegacy(v=>!v)}>{legacy?'Close':'Open'} research and integrity tools</button>{legacy&&<LegacyTools member={member} products={products} shipments={shipments}/>}</section>}</div>;
 }
 function LegacyTools({member,products,shipments}:{member:Membership;products:DataRecord[];shipments:DataRecord[]}){const evidence=useOperationPage('evidence',member.workspaceId,0);return <><p>Evidence candidates: current 20-record page. Page separately to find an older registered proof.</p>{evidence.error&&<p role="alert" className="error">Evidence candidates unavailable.</p>}<OperationPager page={evidence} label="evidence candidates"/><ResearchVerification member={member} products={products} shipments={shipments} evidence={evidence.rows} evidenceReady={!evidence.loading&&!evidence.error}/></>;}
-function AdjustmentReviews({member}:{member:Membership}){const [revision,setRevision]=useState(0),page=useOperationPage('approvals',member.workspaceId,revision),[error,setError]=useState(''),[busy,setBusy]=useState(false);async function review(event:FormEvent<HTMLFormElement>,r:DataRecord){event.preventDefault();setBusy(true);setError('');const input=Object.fromEntries(new FormData(event.currentTarget));try{await workspaceCommand('approval',{id:r.id,version:r.version,...input});setRevision(v=>v+1);}catch(e){setError(e instanceof Error?e.message:'Review unavailable. Refresh the retained decision before retrying.');}finally{setBusy(false);}}return <section className="module-card operations-card"><h2>Stock adjustment &amp; correction approvals</h2>{(error||page.error)&&<p role="alert" className="error">{error||page.error}</p>}{page.loading&&<p role="status">Loading approval page…</p>}{!page.loading&&!page.error&&!page.rows.length&&<p>No approvals in this page.</p>}{page.rows.map(r=><article className="operations-row" key={r.id}><b>{String(r.kind)} · {String(r.status)}</b><p>Requested by {String(r.requestedBy)} · Original movement {String(r.correctionOf??'Not a correction')}</p><p>Quantity {String((r.input as {quantity?:unknown})?.quantity??'Unknown')} · Reason {String((r.input as {reason?:unknown})?.reason??'Unknown')}</p>{r.status==='Pending'&&(r.requestedBy===member.uid?<p>A different manager must review your request.</p>:<form className="operations-form" onSubmit={e=>void review(e,r)}><label>{r.kind==='Correction'?'Correction':'Adjustment'} review notes<input name="notes" minLength={3} maxLength={240} required/></label><label>Review decision<select name="decision"><option>Approve</option><option>Reject</option></select></label><button disabled={busy}>Record {r.kind==='Correction'?'correction':'adjustment'} review</button></form>)}</article>)}<OperationPager page={page} label="approvals"/></section>;}
+function AdjustmentReviews({member}:{member:Membership}) {
+  const [revision, setRevision] = useState(0);
+  const page = useOperationPage('approvals', member.workspaceId, revision);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [openId, setOpenId] = useState('');
+  const prefix = useId();
+
+  async function review(event: FormEvent<HTMLFormElement>, record: DataRecord) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    const input = Object.fromEntries(new FormData(event.currentTarget));
+    try {
+      await workspaceCommand('approval', {id: record.id, version: record.version, ...input});
+      setRevision(value => value + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Review unavailable. Refresh the retained decision before retrying.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="module-card operations-card">
+    <h2>Stock adjustment &amp; correction approvals</h2>
+    {(error || page.error) && <p role="alert" className="error">{error || page.error}</p>}
+    {page.loading && <p role="status">Loading approval page…</p>}
+    {!page.loading && !page.error && !page.rows.length && <p>No approvals in this page.</p>}
+    {page.rows.map(record => {
+      const open = record.id === openId;
+      const pending = record.status === 'Pending';
+      const ownRequest = record.requestedBy === member.uid;
+      const kind = record.kind === 'Correction' ? 'Correction' : 'Adjustment';
+      const input = record.input as {quantity?: unknown; reason?: unknown} | undefined;
+      const panelId = `${prefix}-${record.id}`;
+      return <article className="operations-row stock-approval-row" key={record.id}>
+        <b>{kind} · {String(record.status)}</b>
+        <p>Requested by {String(record.requestedBy ?? 'Unknown')} · Request {record.id}</p>
+        <p>Quantity {String(input?.quantity ?? 'Unknown')} · Reason {String(input?.reason ?? 'Unknown')}</p>
+        <button type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpenId(open ? '' : record.id)}>
+          {open ? 'Hide details' : 'Review details'}
+        </button>
+        <div id={panelId} hidden={!open}>
+          {open && <>
+            <StockApprovalDetails key={`${record.id}:${record.version}`} record={record} scope={member.workspaceId}/>
+            {pending && ownRequest && <p>A different manager must review your request.</p>}
+            {pending && !ownRequest && <form className="operations-form" onSubmit={event => void review(event, record)}>
+              <label>{kind} review notes<input name="notes" minLength={3} maxLength={240} required/></label>
+              <label>Review decision<select name="decision"><option>Approve</option><option>Reject</option></select></label>
+              <button disabled={busy}>Record {kind.toLowerCase()} review</button>
+            </form>}
+            {!pending && typeof record.notes === 'string' && <p>Review notes {record.notes}</p>}
+          </>}
+        </div>
+      </article>;
+    })}
+    <OperationPager page={page} label="approvals"/>
+  </section>;
+}

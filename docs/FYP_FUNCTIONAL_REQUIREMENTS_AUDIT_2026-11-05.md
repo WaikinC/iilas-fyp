@@ -1,5 +1,14 @@
 # IILAS functional requirements audit
 
+## Local follow-up on stock reviews and dashboard alerts
+
+- **Wong FR-28.** In **Reports & Statistics → Stock adjustment & correction reviews**, open **Review details**. The selected request shows the product and SKU, requested direction and reference, current affected-bin balances, the exact original or resulting movement when linked, and up to five dated movements. Older records can have unavailable fields. Review decisions still use the version-checked approval command.
+- **Choong FR-15.** The eight-card dashboard now surfaces recent saved delivery AI risk, separate rule follow-up and open integrity exceptions for Admin and Manager. Delivery records must match the current shipment and delivery versions and status. Each source is limited to 20 recent records. The alerts link to Delivery Monitoring and Reports & Statistics. The remaining parcel and broader dashboard scope below still applies.
+
+These changes were verified against the MSI emulator and are pending Firebase release.
+
+## Audit baseline
+
 5 November 2026. This audit compares the two original Project 1 portfolios with the application source at `0d820cb` and the dated local and hosted test evidence. The report timings section also covers the local optimization prepared with this audit.
 
 - **Wong Ric Hang, Inventory Management System** — *Project I Portfolio-WongRicHang.docx*, §3.2.2, printed pp. 73–77, FR-1 to FR-37.
@@ -104,6 +113,6 @@ The 55 focused report tests and the build passed. Lint reported 13 existing warn
 ## Follow-up order for the FYP
 
 1. Measure **Overview refresh**, **Generate statistics** and **View source records** on the hosted release after the supervisor hold, using fixed roles, dates and selections. Record the time to each chart and the time until all results finish.
-2. Close the software gaps visible in the main walkthrough. Show product, bin and movement context in stock approval, then connect current delivery-risk, rule and integrity alerts to the dashboard.
+2. Include the locally verified stock approval details and dashboard alerts in the post-session release review.
 3. Decide which detailed design differences to implement or document explicitly. The largest differences are ordinary reorder-to-incoming lineage, strict role-scoped legacy reads, road-network planning and fleet eligibility.
 4. Record the existing simulated AI results as research evidence and run the current-chain wallet acceptance when scheduled. Parcel/camera and physical Android tests remain deferred.

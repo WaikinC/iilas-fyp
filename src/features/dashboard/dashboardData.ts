@@ -3,10 +3,72 @@ export type DashboardRecords = {
   purchases: DashboardRow[]; deliveries: DashboardRow[]; predictions: DashboardRow[];
   evidence: DashboardRow[]; verifications: DashboardRow[]; parcelAnalyses?: DashboardRow[];
 };
+export type DashboardReviewRecords = {
+  deliveryAI: DashboardRow[];
+  deliveryRules: DashboardRow[];
+  integrityExceptions: DashboardRow[];
+};
+export const canViewDashboardReviewAlerts = (role: string) => role === 'Admin' || role === 'Manager';
 export const timestampMillis = (value: unknown): number => {
   if (!value || typeof value !== 'object' || !('seconds' in value)) return 0;
   return Number(value.seconds) * 1000 + Number('nanoseconds' in value ? value.nanoseconds : 0) / 1e6;
 };
+
+const fields = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+
+export function dashboardReviewAlerts(
+  role: string, scope: string, shipments: DashboardRow[], deliveries: DashboardRow[], records: DashboardReviewRecords,
+) {
+  if (!canViewDashboardReviewAlerts(role)) return { currentAI: [], highRisk: [], aiFollowUp: [], ruleFollowUp: [], integrity: [] };
+  const shipmentById = new Map(shipments.map(row => [row.id, row]));
+  const deliveryById = new Map(deliveries.map(row => [row.id, row]));
+  function latestCurrent(rows: DashboardRow[]) {
+    const current = new Map<string, DashboardRow & {reference: string; observedAtMs: number}>();
+    for (const row of rows) {
+      if (row.ownerId !== scope || typeof row.shipmentId !== 'string' ||
+          typeof row.observedAtMs !== 'number' || !Number.isSafeInteger(row.observedAtMs) || row.observedAtMs <= 0) continue;
+      const shipment = shipmentById.get(row.shipmentId);
+      const delivery = deliveryById.get(row.shipmentId);
+      const source = fields(row.source);
+      const status = delivery ? delivery.status : 'Dispatched';
+      const deliveryVersion = delivery ? delivery.version : 0;
+      if (shipment?.status !== 'Dispatched' || !Number.isSafeInteger(shipment.version) || Number(shipment.version) <= 0 ||
+          !Number.isSafeInteger(deliveryVersion) || Number(deliveryVersion) < 0 ||
+          typeof status !== 'string' || !['Dispatched', 'In Transit', 'Attempt Failed', 'Delivered', 'Returned'].includes(status) ||
+          !source || source.shipmentId !== row.shipmentId || source.shipmentVersion !== shipment.version ||
+          source.deliveryVersion !== deliveryVersion || source.currentStatus !== status) continue;
+      const previous = current.get(row.shipmentId);
+      if (!previous || row.observedAtMs > previous.observedAtMs) {
+        current.set(row.shipmentId, {
+          ...row, observedAtMs: row.observedAtMs,
+          reference: typeof shipment.reference === 'string' && shipment.reference ? shipment.reference : shipment.id,
+        });
+      }
+    }
+    return [...current.values()].sort((a, b) => b.observedAtMs - a.observedAtMs);
+  }
+  const needsReview = (row: DashboardRow) =>
+    row.requiresReview === true && ['Pending', 'NeedsFollowUp'].includes(String(row.reviewStatus));
+  const currentAI = latestCurrent(records.deliveryAI).filter(row => {
+    const status = deliveryById.get(String(row.shipmentId))?.status;
+    const label = fields(row.prediction)?.label;
+    return status !== 'Delivered' && status !== 'Returned' && row.status === 'Predicted' &&
+      (label === 'Low' || label === 'Medium' || label === 'High');
+  });
+  const highRisk = currentAI.filter(row => fields(row.prediction)?.label === 'High');
+  const aiFollowUp = highRisk.filter(needsReview);
+  const ruleFollowUp = latestCurrent(records.deliveryRules).filter(row => {
+    const assessment = fields(row.assessment);
+    return needsReview(row) && (assessment?.level === 'High' || assessment?.dataReviewRequired === true);
+  });
+  const integrity = records.integrityExceptions.filter(row =>
+    row.ownerId === scope && (row.kind === 'inventory' || row.kind === 'delivery') &&
+    typeof row.recordId === 'string' && row.recordId &&
+    ['Open', 'NeedsFollowUp'].includes(String(row.status)) &&
+    ['Unmatched', 'NotRegistered', 'Unavailable'].includes(String(row.outcome)));
+  return { currentAI, highRisk, aiFollowUp, ruleFollowUp, integrity };
+}
 const latestPredictions = (records: DashboardRow[], kind: string) => {
   const latest = new Map<string, DashboardRow>();
   const time = (row: DashboardRow) => kind === 'parcel' && typeof row.createdAt === 'number' && Number.isSafeInteger(row.createdAt) && row.createdAt >= 0 ? row.createdAt : timestampMillis(row.createdAt);
