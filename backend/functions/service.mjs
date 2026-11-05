@@ -4,6 +4,7 @@ import {prepareDeliveryTransition} from './deliveryWorkflow.mjs';
 import {authorizeEvidence,prepareEvidenceRegistration} from './evidenceRegistration.mjs';
 import {createIntegrityCommands} from './integrityWorkflow.mjs';
 import {createFleetTransportCommands} from './fleetTransport.mjs';
+import {fleetComplianceDates,fleetScheduleDay,requireFleetEligibility} from './transportPlanning.js';
 import {createCustomerCommands} from './customerAccess.mjs';
 import {createCustomerOrderCommands,prepareCustomerOrderShipmentDeletion} from './customerOrders.mjs';
 import {createCustomerProofIntegrity} from './customerProofIntegrity.mjs';
@@ -30,6 +31,7 @@ import {getInventoryDemoProductContext,startInventoryDemoProductExperiment,resol
 import {getInventoryDemoReorderAvailability,reviewInventoryDemoReorder,resolveInventoryDemoReorderReview} from './inventoryDemoReorder.mjs';
 
 import {registerAccount,updateAccount,approvedScope,approvedTransaction} from './access.mjs';
+import {prepareStockReference,saveStockReference} from './stockReference.mjs';
 const permissions = {
   products:['Admin','Manager','Inventory'], stock:['Admin','Manager','Inventory','Warehouse'],
   warehouse:['Admin','Manager','Warehouse'], shipments:['Admin','Manager','Logistics'],
@@ -101,19 +103,28 @@ async function stockRequest(auth,scope,input,resolve=false){
           const movement=correctionMovement(original,data.reason,data.reference);
           if(product.archived||product.status!=='Active')fail('Choose an active product.');
           applyLocationMovement(product,movement);
+          const reference=await prepareStockReference(tx,database(),{...data,scope:s});
           const key=randomUUID();
           tx.set(ref('approvals',key),{ownerId:s,kind:'Correction',productId:data.productId,correctionOf:data.correctionOf,input:movement,originalType:original.type,status:'Pending',requestedBy:actor,createdAt:now(),version:1});
           tx.set(linkRef,{ownerId:s,originalMovementId:data.correctionOf,productId:data.productId,approvalId:key,status:'Pending',requestedBy:actor,createdAt:now()});
+          saveStockReference(tx,reference,s,actor,'Pending',key);
           audit(tx,s,actor,'approvals',key,'Request',1,`Correction of ${data.correctionOf}: ${product.name}`);
           result={id:key,pendingApproval:true};
         }else if(data.type==='Adjustment'&&!['Admin','Manager'].includes(member.role)){
           if(product.archived||product.status!=='Active')fail('Choose an active product.');
           const key=randomUUID(),movement={...validateStockMovement(data),locationFrom:data.locationFrom||product.location};
           applyLocationMovement(product,movement);
+          const reference=await prepareStockReference(tx,database(),{...data,scope:s});
           tx.set(ref('approvals',key),{ownerId:s,kind:'Adjustment',productId:data.productId,input:movement,status:'Pending',requestedBy:actor,createdAt:now(),version:1});
+          saveStockReference(tx,reference,s,actor,'Pending',key);
           audit(tx,s,actor,'approvals',key,'Request',1,`Adjustment: ${product.name}`);
           result={id:key,pendingApproval:true};
-        }else result={id:stockWrite(tx,s,actor,data.productId,product,data)};
+        }else{
+          const reference=await prepareStockReference(tx,database(),{...data,scope:s});
+          const movementId=stockWrite(tx,s,actor,data.productId,product,data);
+          saveStockReference(tx,reference,s,actor,'Committed',movementId);
+          result={id:movementId};
+        }
       }
       tx.create(receiptRef,{ownerId:s,actor,operationId:data.operationId,commandHash,state:resolve?'Cancelled':'Completed',result,createdAt:now()});
       return result;
@@ -140,8 +151,13 @@ async function approval(auth,scope,input){
       if(link.approvalId!==key||link.status!=='Pending')fail('Correction was already reviewed or superseded.');
       if(original.productId!==request.productId)fail('Correction product does not match the original movement.');
     }
+    const reference=await prepareStockReference(tx,database(),{scope:s,productId:request.productId,type:request.kind,
+      reference:request.input?.reference,approvalId:key,reject:input.decision==='Reject'});
     let movementId=null;
-    if(input.decision==='Approve')movementId=stockWrite(tx,s,actor,request.productId,product,request.kind==='Correction'?{...correctionMovement(original,request.input.reason,request.input.reference),correctionOf:request.correctionOf,approvalId:key}:request.input);
+    if(input.decision==='Approve'){
+      movementId=stockWrite(tx,s,actor,request.productId,product,request.kind==='Correction'?{...correctionMovement(original,request.input.reason,request.input.reference),correctionOf:request.correctionOf,approvalId:key}:request.input);
+      saveStockReference(tx,reference,s,actor,'Committed',movementId);
+    }else if(reference)tx.delete(reference);
     if(link)tx.update(ref('stockCorrectionLinks',request.correctionOf),{status:input.decision==='Approve'?'Approved':'Rejected',reviewedBy:actor,reviewedAt:now(),movementId});
     tx.update(ref('approvals',key),{status:input.decision==='Approve'?'Approved':'Rejected',movementId,reviewedBy:actor,reviewedAt:now(),notes:text(input.notes,'Review notes',240,3),version:request.version+1});
     audit(tx,s,actor,'approvals',key,input.decision,request.version+1,request.kind);
@@ -188,6 +204,7 @@ async function prepareRecordSave(tx,{scope:s,actor,kind,recordId:key,data:source
         const vehicle=scoped(await tx.get(ref('vehicles',plan.vehicleId)),s),driver=scoped(await tx.get(ref('drivers',plan.driverId)),s);
         const member=await tx.get(ref('users',plan.driverUid));
         if(plan.status!=='Scheduled'||vehicle.status!=='Available'||vehicle.capacity<data.parcelCount||driver.status!=='Available'||!member.data()?.active||!['Driver','Logistics','Manager','Admin'].includes(member.data().role))fail('Schedule an available vehicle and active driver before dispatch.');
+        requireFleetEligibility(vehicle,driver,fleetScheduleDay());
         data.driver=plan.driverName;
       }
       data.items=data.items.map((item,index)=>{
@@ -322,13 +339,13 @@ async function entity(auth,scope,input){
       const member=await tx.get(ref('users',data.userId));
       if(!member.exists||!member.data().active||!['Driver','Logistics','Manager','Admin'].includes(member.data().role))fail('Select an active delivery team member.');
     }
-    const version=(old?.version||0)+1;
+    const version=(old?.version||0)+1,dates=kind==='suppliers'?{}:fleetComplianceDates(kind,input.data,old??{});
     if(supplierKey){
       if(supplierOldKey&&supplierOldKey!==supplierKey)tx.delete(ref('procurementKeys',supplierOldKey));
       tx.set(ref('procurementKeys',supplierKey),{ownerId:s,kind:'supplier',recordId:key});
     }
     if(uniqueKey){if(old){const oldKey=kind==='vehicles'?`${s}_vehicle_${hash(old.name.replace(/[\s-]/g,''))}`:`${s}_driver_${old.userId}`;if(oldKey!==uniqueKey)tx.delete(ref('uniqueKeys',oldKey));}tx.set(ref('uniqueKeys',uniqueKey),{ownerId:s,kind,recordId:key});}
-    tx.set(ref(kind,key),{...data,ownerId:s,version,createdAt:old?.createdAt||now(),updatedAt:now(),updatedBy:actor});
+    tx.set(ref(kind,key),{...data,...dates,ownerId:s,version,createdAt:old?.createdAt||now(),updatedAt:now(),updatedBy:actor});
     audit(tx,s,actor,kind,key,old?'Update':'Create',version,data.name);return {id:key};
   });
 }
@@ -354,7 +371,9 @@ async function planTransport(auth,scope,input){
     if(shipment.status!=='Prepared'||vehicle.status!=='Available'||driver.status!=='Available'||!member.exists||!member.data().active||!['Driver','Logistics','Manager','Admin'].includes(member.data().role))fail('Choose a prepared shipment, available vehicle, and active driver.');
     if(vehicle.capacity<shipment.parcelCount)fail('Vehicle capacity is insufficient.');
     if(vehicleLock.exists||driverLock.exists)fail('The vehicle or driver is assigned to another delivery.');
-    const data={ownerId:s,shipmentId:key,vehicleId:input.vehicleId,vehicleName:vehicle.name,driverId:input.driverId,driverUid:driver.userId,driverName:driver.name,origin:text(input.origin,'Origin',240),destination:shipment.address,carrier:text(input.carrier,'Carrier',120),distanceKm:number(input.distanceKm,'distance',0,100000),estimatedHours:number(input.estimatedHours,'ETA hours',0.1,1000),cost:number(input.cost,'cost',0,1000000),plannedDate:day(input.plannedDate),status:'Scheduled',version:(existing.data()?.version||0)+1,createdAt:existing.data()?.createdAt||now(),updatedAt:now(),updatedBy:actor};
+    const plannedDate=day(input.plannedDate);
+    requireFleetEligibility(vehicle,driver,fleetScheduleDay(plannedDate));
+    const data={ownerId:s,shipmentId:key,vehicleId:input.vehicleId,vehicleName:vehicle.name,driverId:input.driverId,driverUid:driver.userId,driverName:driver.name,origin:text(input.origin,'Origin',240),destination:shipment.address,carrier:text(input.carrier,'Carrier',120),distanceKm:number(input.distanceKm,'distance',0,100000),estimatedHours:number(input.estimatedHours,'ETA hours',0.1,1000),cost:number(input.cost,'cost',0,1000000),plannedDate,status:'Scheduled',version:(existing.data()?.version||0)+1,createdAt:existing.data()?.createdAt||now(),updatedAt:now(),updatedBy:actor};
     tx.set(ref('transportPlans',key),data);
     tx.set(ref('resourceAssignments',`${s}_vehicle_${input.vehicleId}`),{ownerId:s,shipmentId:key});tx.set(ref('resourceAssignments',`${s}_driver_${input.driverId}`),{ownerId:s,shipmentId:key});
     const shipmentEvent=audit(tx,s,actor,'shipments',key,'Assign transport',shipment.version+1,shipment.reference);

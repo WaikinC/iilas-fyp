@@ -9,7 +9,7 @@ const checks=[];
 try{
  const context=await browser.newContext({viewport:{width:1440,height:1000}}),externalRequests=[];await context.route('**/*',route=>{const url=new URL(route.request().url());if(url.origin==='http://127.0.0.1:5173')return route.continue();externalRequests.push(url.hostname);return route.abort();});await context.addInitScript(()=>{
   const q=window.fleetUI={member:null,queries:[],calls:[],mode:'ok',receipts:{},gpsCalls:0,records:{vehicles:[],drivers:[],transportPlans:[],resourceAssignments:[],fleetEvents:[],shipments:[{id:'s1',ownerId:'scope',version:2,status:'Prepared',reference:'DEMO-1',parcelCount:2,address:'Recorded destination',driverUid:'driver1'},{id:'s2',ownerId:'scope',version:1,status:'Prepared',reference:'DEMO-2',parcelCount:2,address:'Second destination'}]}};
-  for(let i=1;i<=21;i++){const suffix=String(i).padStart(3,'0');q.records.vehicles.push({id:'v'+i,ownerId:'scope',version:1,name:'ABC-'+suffix,capacity:20,status:'Available',maintenanceDate:'2026-10-25',fuelLitres:0});q.records.drivers.push({id:'d'+i,ownerId:'scope',version:1,name:'Driver '+suffix,userId:'driver'+i,licence:'L'+i,status:'Available'});}
+  for(let i=1;i<=21;i++){const suffix=String(i).padStart(3,'0');q.records.vehicles.push({id:'v'+i,ownerId:'scope',version:1,name:'ABC-'+suffix,capacity:20,status:'Available',maintenanceDate:'2099-12-01',fuelLitres:0,...(i===4?{inspectionExpiryDate:'2000-01-01'}:{})});q.records.drivers.push({id:'d'+i,ownerId:'scope',version:1,name:'Driver '+suffix,userId:'driver'+i,licence:'L'+i,status:'Available',...(i===4?{licenceExpiryDate:'2000-01-01'}:{})});}
   q.records.transportPlans.push({id:'s1',ownerId:'scope',shipmentId:'s1',version:1,status:'Scheduled',vehicleId:'v1',vehicleName:'ABC-001',driverId:'d1',driverName:'Driver 001',driverUid:'driver1',origin:'Warehouse',destination:'Recorded destination',carrier:'Internal',plannedDate:'2026-10-25',distanceKm:10,estimatedHours:1,cost:10,planning:null});
   q.records.shipments.push({id:'completed',ownerId:'scope',version:3,status:'Dispatched',reference:'DEMO-COMPLETED',parcelCount:1,address:'Completed destination'},{id:'cancelled',ownerId:'scope',version:3,status:'Prepared',reference:'DEMO-CANCELLED',parcelCount:1,address:'Cancelled destination'});q.records.transportPlans.push({id:'completed',ownerId:'scope',shipmentId:'completed',version:2,status:'Completed',vehicleName:'Old van',driverName:'Old driver',origin:'Warehouse',destination:'Completed destination',plannedDate:'2026-10-20',distanceKm:20,estimatedHours:1,cost:10},{id:'cancelled',ownerId:'scope',shipmentId:'cancelled',version:2,status:'Cancelled',vehicleId:'v4',driverId:'d4',vehicleName:'ABC-004',driverName:'Driver 004',origin:'Warehouse',destination:'Cancelled destination',plannedDate:'2026-10-20',distanceKm:20,estimatedHours:1,cost:10});
   for(const kind of ['vehicle','driver'])q.records.resourceAssignments.push({id:'scope_'+kind+'_'+(kind==='vehicle'?'v1':'d1'),ownerId:'scope',shipmentId:'s1'});
@@ -96,14 +96,20 @@ try{
   await page.getByLabel('Registration',{exact:true}).fill('QA-NEW-VAN');
   await dismissClose('Close fleet form');assert.equal(await page.getByLabel('Registration',{exact:true}).inputValue(),'QA-NEW-VAN');
   await page.getByLabel('Parcel capacity',{exact:true}).fill('10');await page.getByLabel('Vehicle base status').selectOption('Available');await page.getByLabel('Maintenance due',{exact:true}).fill('2099-12-01');await page.getByLabel('Fuel litres',{exact:true}).fill('1');
+   await page.getByLabel('Inspection expiry date',{exact:true}).fill('2099-12-02');
+   await page.getByLabel('Insurance expiry date',{exact:true}).fill('2099-12-03');
   const n=await calls('entity');await page.getByRole('button',{name:'Create vehicle',exact:true}).click();await form().waitFor({state:'detached'});assert.equal(await calls('entity'),n+1);
   assert.equal(await page.evaluate(()=>window.fleetUI.calls.filter(x=>x.action==='entity').at(-1).input.kind),'vehicles');
+   const dates=await page.evaluate(()=>window.fleetUI.calls.filter(x=>x.action==='entity').at(-1).input.data);
+   assert.equal(dates.inspectionExpiryDate,'2099-12-02');
+   assert.equal(dates.insuranceExpiryDate,'2099-12-03');
  });
  await check('Add driver has its own fields and one create action',async()=>{
   await tab('Drivers').click();await page.getByLabel('Search this driver page',{exact:true}).fill('');
   await page.getByRole('button',{name:'Add driver',exact:true}).click();assert.equal(await form().getByLabel('Registration',{exact:true}).count(),0);
-  await page.getByLabel('Driver name',{exact:true}).fill('Fictional new driver');await page.getByLabel('Driver account ID').fill('fictional-approved-driver');await page.getByLabel('Driver licence',{exact:true}).fill('FICTIONAL-LICENCE');const n=await calls('entity');await page.getByRole('button',{name:'Create driver',exact:true}).click();await form().waitFor({state:'detached'});assert.equal(await calls('entity'),n+1);
+   await page.getByLabel('Driver name',{exact:true}).fill('Fictional new driver');await page.getByLabel('Driver account ID').fill('fictional-approved-driver');await page.getByLabel('Driver licence',{exact:true}).fill('FICTIONAL-LICENCE');await page.getByLabel('Licence expiry date',{exact:true}).fill('2099-12-04');const n=await calls('entity');await page.getByRole('button',{name:'Create driver',exact:true}).click();await form().waitFor({state:'detached'});assert.equal(await calls('entity'),n+1);
   assert.equal(await page.evaluate(()=>window.fleetUI.calls.filter(x=>x.action==='entity').at(-1).input.kind),'drivers');
+   assert.equal(await page.evaluate(()=>window.fleetUI.calls.filter(x=>x.action==='entity').at(-1).input.data.licenceExpiryDate),'2099-12-04');
  });
  await check('Lost resource edit remains recoverable across Fleet tabs and retries the same operation',async()=>{
   await tab('Vehicles').click();await page.getByRole('button',{name:'Edit vehicle ABC-002',exact:true}).click();await page.getByLabel('Edit registration',{exact:true}).fill('NEW-002');await page.getByLabel('Edit vehicle base status',{exact:true}).selectOption('Maintenance');
@@ -128,6 +134,21 @@ try{
 
  await page.goto('http://127.0.0.1:5173/scripts/fixtures/fleet-transport-ui/harness.html?transport');await page.getByRole('heading',{name:'Transport Management',exact:true}).waitFor();
  await check('Every Transport tab keeps readable text when selected, inactive and hovered',()=>tabContrast(['All plans','Scheduled','Completed','Cancelled'],'All plans','transport'));
+  await check('Transport labels expired choices and explains unknown legacy dates',async()=>{
+   await page.getByRole('button',{name:'Plan prepared shipment',exact:true}).click();
+   const vehicle=page.getByLabel('Plan vehicle',{exact:true}),driver=page.getByLabel('Plan driver',{exact:true});
+   const expiredVehicle=vehicle.locator('option[value="v4"]'),expiredDriver=driver.locator('option[value="d4"]');
+   await expiredVehicle.waitFor({state:'attached'});await expiredDriver.waitFor({state:'attached'});
+   assert.match(await expiredVehicle.textContent(),/inspection.*expired/i);
+   assert.equal(await expiredVehicle.getAttribute('disabled'),'');
+   assert.match(await expiredDriver.textContent(),/licence.*expired/i);
+   assert.equal(await expiredDriver.getAttribute('disabled'),'');
+   await vehicle.selectOption('v3');await driver.selectOption('d3');
+   await page.getByText(/Dates not recorded: Vehicle inspection, Vehicle insurance, Driver licence/).waitFor();
+   page.once('dialog',d=>d.accept());
+   await page.getByRole('button',{name:'Close transport editor',exact:true}).click();
+   await form().waitFor({state:'detached'});
+  });
  await check('Transport separates all/scheduled/completed/cancelled views and focused details',async()=>{
   for(const name of['All plans','Scheduled','Completed','Cancelled'])assert.equal(await tab(name).count(),1);await tab('Completed').click();await page.getByRole('button',{name:'Open transport DEMO-COMPLETED',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Open transport DEMO-1',exact:true}).count(),0);await tab('Cancelled').click();await page.getByRole('button',{name:'Open transport DEMO-CANCELLED',exact:true}).waitFor();await tab('All plans').click();await page.getByRole('button',{name:'Open transport DEMO-1',exact:true}).click();await page.getByRole('dialog',{name:'Transport plan',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Edit transport DEMO-1',exact:true}).count(),1);
  });

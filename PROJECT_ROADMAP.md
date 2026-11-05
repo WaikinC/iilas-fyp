@@ -1,3 +1,7 @@
+## Operational gap follow-up — 5 November 2026
+
+Local work addresses manual movement references, ordinary purchase expected incoming, and the recorded date checks for fleet eligibility. The updated [FYP functional requirements audit](docs/FYP_FUNCTIONAL_REQUIREMENTS_AUDIT_2026-11-05.md) records the exact scope, legacy compatibility and remaining evidence. Firebase publication, parcel and physical phone trials are deferred.
+
 ## Customer order extension — local verification, 4 November 2026
 
 Orders/Shipments Customer navigation, recoverable requests, separate staff review/mapping and atomic generated-SHP linkage are implemented in the isolated development checkout. Private tracking starts with location sharing off. Normal warehouse/transport/dispatch remains authoritative; eligible linked Draft deletion cancels the order without resurrection. Read-only current-proof integrity checking projects safe outcomes only. Actual emulator request/recovery/boundary, grouped browser and full warehouse/transport/dispatch/proof checks pass; final receipts are recorded in the verification note. Firebase publication, parcel/camera and physical phone testing remain held. See the [local guide](docs/CUSTOMER_ORDERS_LOCAL_GUIDE_2026-11-04.md).

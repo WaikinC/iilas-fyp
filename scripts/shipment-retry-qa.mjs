@@ -7,6 +7,12 @@ import {mock, test} from 'node:test';
 // Firestore boundary is replaced so an aborted commit can be replayed reliably.
 const require = createRequire(new URL('../backend/functions/service.mjs', import.meta.url));
 let database;
+Object.assign(process.env, {
+  FUNCTIONS_EMULATOR: 'true', GCLOUD_PROJECT: 'fyp-inventory-and-logistics',
+  GOOGLE_CLOUD_PROJECT: 'fyp-inventory-and-logistics', FIRESTORE_EMULATOR_HOST: '127.0.0.1:8081',
+  FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099', FIREBASE_STORAGE_EMULATOR_HOST: '127.0.0.1:9199',
+  IILAS_FYP_COMPLETION_MODE: 'local-demo',
+});
 // Firebase Admin's ESM facade reads these CommonJS exports on first import.
 mock.method(require('firebase-admin/firestore'), 'getFirestore', () => database);
 const {executeCommand} = await import('../backend/functions/service.mjs');
@@ -114,6 +120,17 @@ test('dispatch survives an aborted enriched attempt and commits exactly one stoc
   await assert.rejects(dispatch(state.shipment), /record changed|Dispatched shipments are locked/);
   assert.equal(state.records.get('products/product').quantityOnHand, 7);
   assert.equal([...state.records.keys()].filter(path => path.startsWith('stockMovements/')).length, 1);
+});
+
+test('dispatch rechecks the current day and leaves stock and shipment intact if compliance has expired', async () => {
+  const state = fixture();
+  database = state.db;
+  state.records.get('transportPlans/shipment').plannedDate = '1999-12-31';
+  state.records.get('vehicles/vehicle').insuranceExpiryDate = '2000-01-01';
+  const before = structuredClone(state.records);
+  await assert.rejects(dispatch(state.shipment), /insurance.*expired/i);
+  assert.deepEqual(state.records, before);
+  assert.equal(state.aborted.length, 0);
 });
 
 for (const [label, changes] of [

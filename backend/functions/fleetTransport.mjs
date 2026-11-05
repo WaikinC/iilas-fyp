@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {runCompletionOperation,assertCompletionLocal} from './completionOperations.mjs';
 import {approvedTransaction,ROLES} from './access.mjs';
 import {completionExact,completionIdentifier} from './completionWorkflow.js';
-import {validateFleetUpdate,validateTransportRevision,planningEstimate} from './transportPlanning.js';
+import {validateFleetUpdate,validateTransportRevision,planningEstimate,fleetScheduleDay,requireFleetEligibility} from './transportPlanning.js';
 const roles=['Admin','Manager','Logistics'],deliveryRoles=['Admin','Manager','Logistics','Driver'];
 const ref=(kind,id)=>getFirestore().collection(kind).doc(id),sha=value=>createHash('sha256').update(value).digest('hex'),stamp=()=>FieldValue.serverTimestamp();
 const fail=(message,code='failed-precondition')=>{throw Object.assign(Error(message),{code});};
@@ -50,6 +50,7 @@ export function createFleetTransportCommands(){
    const vehicle=scoped(await tx.get(ref('vehicles',input.vehicleId)),scope),driver=scoped(await tx.get(ref('drivers',input.driverId)),scope),account=await tx.get(ref('users',driver.userId));activeDriver(account);
    if(vehicle.status!=='Available'||driver.status!=='Available')fail('Choose an available base vehicle and driver.');
    if(!Number.isSafeInteger(vehicle.capacity)||!Number.isSafeInteger(shipment.parcelCount)||vehicle.capacity<shipment.parcelCount)fail('Vehicle capacity is insufficient.');
+   requireFleetEligibility(vehicle,driver,fleetScheduleDay(input.plannedDate));
    const nextVehicle=resourceKey(scope,'vehicles',input.vehicleId),nextDriver=resourceKey(scope,'drivers',input.driverId),previousVehicle=old?resourceKey(scope,'vehicles',old.vehicleId):null,previousDriver=old?resourceKey(scope,'drivers',old.driverId):null;
    const lockKeys=[...new Set([nextVehicle,nextDriver,previousVehicle,previousDriver].filter(Boolean))],locks=new Map();
    for(const k of lockKeys)locks.set(k,await tx.get(ref('resourceAssignments',k)));

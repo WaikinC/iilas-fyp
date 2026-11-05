@@ -12,7 +12,8 @@ const db={doc:ref,collection:kind=>({doc:id=>ref(kind+'/'+id)}),async runTransac
  }throw Error('retry exhausted');}};
 mock.method(require('firebase-admin/firestore'),'getFirestore',()=>db);mock.method(require('firebase-admin/firestore').FieldValue,'serverTimestamp',()=>({seconds:100,nanoseconds:0}));
 const {createFleetTransportCommands}=await import('../backend/functions/fleetTransport.mjs');
-const vehicle={ownerId:'scope',name:'ABC-1',capacity:20,status:'Available',maintenanceDate:'2026-10-25',fuelLitres:0,version:1,createdAt:{seconds:1}},driver={ownerId:'scope',name:'Driver One',userId:'driver1',licence:'L1',status:'Available',version:1,createdAt:{seconds:1}};
+const {executeCommand}=await import('../backend/functions/service.mjs');
+const vehicle={ownerId:'scope',name:'ABC-1',capacity:20,status:'Available',maintenanceDate:'2099-12-01',fuelLitres:0,version:1,createdAt:{seconds:1}},driver={ownerId:'scope',name:'Driver One',userId:'driver1',licence:'L1',status:'Available',version:1,createdAt:{seconds:1}};
 const call=(action,input,uid='manager',scope='scope')=>createFleetTransportCommands()[action]({uid},scope,input),plan=(patch={})=>({operationId:randomUUID(),shipmentId:'s1',expectedShipmentVersion:2,expectedPlanVersion:1,vehicleId:'v2',driverId:'d2',origin:'Warehouse A',carrier:'Internal',plannedDate:'2026-10-25',distanceKm:20,estimatedHours:1,cost:10,planning:null,...patch});
 const edit=(patch={})=>({operationId:randomUUID(),kind:'vehicles',id:'v2',expectedVersion:1,data:{name:'ABC-3',capacity:25,status:'Available',maintenanceDate:'2026-10-25',fuelLitres:0},...patch});
 const owned=kind=>[...rows.keys()].filter(k=>k.startsWith(kind+'/'));
@@ -34,6 +35,49 @@ test('atomic reassignment swaps both locks, uses recorded address and preserves 
 });
 test('same resources may change manual planning values without releasing their locks',async()=>{
  const r=plan({vehicleId:'v1',driverId:'d1',planning:{origin:{latitude:0,longitude:0},destination:{latitude:0,longitude:0},speedKph:60},distanceKm:0,estimatedHours:.1});await call('reviseTransportPlan',r);assert.equal(rows.get('resourceAssignments/scope_vehicle_v1').shipmentId,'s1');assert.equal(rows.get('transportPlans/s1').planning.estimate.distanceKm,0);assert.equal(rows.get('transportPlans/s1').estimatedHours,.1);
+});
+test('both scheduling commands reject ineligible recorded dates before touching locks',async()=>{
+ const cases=[
+  ['vehicles/v2','inspectionExpiryDate','2099-11-30',/inspection.*expired/i],
+  ['vehicles/v2','insuranceExpiryDate','2099-11-30',/insurance.*expired/i],
+  ['vehicles/v2','maintenanceDate','2099-11-30',/maintenance.*overdue/i],
+  ['vehicles/v2','inspectionExpiryDate','2099-02-30',/inspection.*invalid/i],
+  ['drivers/d2','licenceExpiryDate','2099-11-30',/licence.*expired/i],
+  ['drivers/d2','licenceExpiryDate','2000-01-01',/licence.*expired/i],
+ ];
+ const baseline=clone([...rows]);
+ for(const [path,field,value,reason] of cases)for(const legacy of [false,true]){
+  rows=new Map(clone(baseline));
+  rows.get('vehicles/v2').maintenanceDate='2099-12-01';
+  rows.get(path)[field]=value;
+  if(legacy){
+   rows.delete('transportPlans/s1');
+   rows.delete('resourceAssignments/scope_vehicle_v1');
+   rows.delete('resourceAssignments/scope_driver_d1');
+  }
+  const before=clone([...rows]);
+  const request=plan({plannedDate:value==='2000-01-01'?'1999-12-31':'2099-12-01'});
+  const action=legacy?'planTransport':'reviseTransportPlan';
+  await assert.rejects(executeCommand({uid:'manager'},{action,input:request}),reason);
+  assert.deepEqual([...rows],before);
+ }
+});
+test('a licence that expires on the planned day is valid for that day',async()=>{
+ rows.get('vehicles/v2').maintenanceDate='2099-12-01';
+ rows.get('vehicles/v2').insuranceExpiryDate='2099-12-01';
+ rows.get('drivers/d2').licenceExpiryDate='2099-12-01';
+ const result=await call('reviseTransportPlan',plan({plannedDate:'2099-12-01'}));
+ assert.equal(result.version,2);
+});
+test('legacy fleet edit preserves recorded expiry dates omitted by its older payload',async()=>{
+ const vehicle=rows.get('vehicles/v2');
+ vehicle.inspectionExpiryDate='2099-12-01';
+ vehicle.legacyField='old replacement behaviour';
+ const input={kind:'vehicles',id:'v2',version:1,data:{name:'ABC-2',capacity:25,status:'Available',maintenanceDate:'2099-12-01',fuelLitres:0}};
+ await executeCommand({uid:'manager'},{action:'entity',input});
+ const updated=rows.get('vehicles/v2');
+ assert.equal(updated.inspectionExpiryDate,'2099-12-01');
+ assert.equal(updated.legacyField,undefined);
 });
 test('stale versions dispatched shipments occupied or foreign resources and disabled drivers leave every lock unchanged',async()=>{
  const original=clone([...rows]);for(const mode of ['shipment-version','plan-version','dispatch','occupied','foreign','capacity','disabled','pending','old-lock']){

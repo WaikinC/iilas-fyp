@@ -28,6 +28,12 @@ Correction uses the existing actor/scope-scoped UUID operation receipt and saved
 
 ## Rules and integrity
 
+### Manual movement references
+
+A nonblank staff reference identifies one movement type for one product in the shared system. The server compares trimmed, uppercased references. Separate manual partial receipts can use distinct line references, and a reference can be shared across different products or movement types. A blank reference is still allowed. Stock commands and independent approval write the reference claim atomically with the pending or committed record. A rejection releases its pending claim. Exact saved requests continue to replay their original outcome.
+
+For records created before the claim was introduced, the server checks prior history and pending reviews that already use the canonical reference. Existing movements, approvals and hashes are preserved. Procurement and warehouse-generated movements use their existing workflow identifiers.
+
 Clients cannot write products, stock movements, approvals or correction claims directly, including Admin. Approved active staff may read claims only within the fixed shared scope. Pending/disabled/foreign scope reads and unscoped collection queries are denied. Private operation receipts remain unreadable by clients. Backend transactions recheck the current account/role and system configuration on every mutation and replay.
 
 Historical inventory canonical format `IILAS-INVENTORY-v1` is byte compatible. New movements use `integrityVersion:2` and `IILAS-INVENTORY-v2`: the previous core fields plus origin/reversal type, correction/approval/dispatch/procurement links, allocations and per-bin before/after balances. Both browser and backend use `lib/integrity.js`. Hashes prove consistency with registered content, not that the physical count or original entry was true. Local Hardhat checks are separate from outstanding browser-wallet acceptance.

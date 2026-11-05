@@ -17,7 +17,10 @@ const inventory=await client('Inventory'),manager=await client('Manager'),wareho
 const product=async(name,quantityOnHand=20)=>{
  const {id}=await createFixtureBusinessRecord(inventory,'products',fixtureCreationData('products',{name:`${name} ${suffix}`,sku:`LOC-${suffix}-${ordinal}`,barcode:barcode(ordinal++),category:'QA',location:'A-01',reorderLevel:3,quantityOnHand,reservedQuantity:0,status:'Active',imageDataUrl:''}));return id;
 };
-const command=(productId,type,quantity,extra={})=>({productId,type,quantity,reason:'Physical count and location checked',reference:`LOC-${suffix}`,operationId:randomUUID(),...extra});
+const command=(productId,type,quantity,extra={})=>{
+ const operationId=randomUUID();
+ return {productId,type,quantity,reason:'Physical count and location checked',reference:`LOC-${suffix}-${operationId}`,operationId,...extra};
+};
 const move=(id,type,quantity,extra={},actor=inventory)=>actor.call('stock',command(id,type,quantity,extra));
 const correction=(productId,correctionOf,extra={})=>({productId,type:'Correction',correctionOf,reason:'Duplicate manual entry independently counted',reference:`FIX-${suffix}`,operationId:randomUUID(),...extra});
 const review=(id,decision='Approve',actor=manager)=>actor.call('approval',{id,version:1,decision,notes:'Independent physical balance and entry reviewed'});
@@ -28,7 +31,7 @@ const draft=async(id,quantity,label)=>{const {id:key}=await createFixtureBusines
 const step=(shipmentId,stage,version)=>warehouse.call('warehouse',{shipmentId,version,data:{step:stage,notes:'Bin quantities physically checked',parcelCount:1}});
 let registeredDriver;
 async function dispatch(shipmentId){
- const vehicle=await logistics.call('entity',{kind:'vehicles',data:{name:`LOC-${suffix}-${ordinal++}`,capacity:10,status:'Available',maintenanceDate:'2026-10-10',fuelLitres:40}});
+ const vehicle=await logistics.call('entity',{kind:'vehicles',data:{name:`LOC-${suffix}-${ordinal++}`,capacity:10,status:'Available',maintenanceDate:'2099-12-01',fuelLitres:40}});
  registeredDriver??=await logistics.call('entity',{kind:'drivers',data:{name:`Location driver ${ordinal}`,userId:driver.uid,licence:`LOC-${suffix}-${ordinal++}`,status:'Available'}});
  await logistics.call('planTransport',{shipmentId,vehicleId:vehicle.id,driverId:registeredDriver.id,origin:'Warehouse A',carrier:'IILAS Fleet',distanceKm:20,estimatedHours:1,cost:35,plannedDate:'2026-10-10'});
  const ready=await snapshot('shipments',shipmentId);

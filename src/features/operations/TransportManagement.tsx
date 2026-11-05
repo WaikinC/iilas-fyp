@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {collection,getDocs,limit,query,where} from 'firebase/firestore';
 import {db} from '../../../lib/firebase';
-import {planningEstimate,validatePlanningInputs,type PlanningInputs,type PlanningEstimate,type TransportRevision} from '../../../lib/transportPlanning';
+import {fleetResourceEligibility,fleetScheduleDay,planningEstimate,validatePlanningInputs,type PlanningInputs,type PlanningEstimate,type TransportRevision} from '../../../lib/transportPlanning';
 import {useDialogFocus} from '../../components/useDialogFocus';
 import TransportPlanningMap from './TransportPlanningMap';
 import type {Membership} from '../workspace/WorkspaceGate';
@@ -78,17 +78,52 @@ function TransportEditor({member,initial,shipments,vehicles,drivers,va,da,busy,o
  }
  function calculate(){onDirty();setError('');try{const inputs=validatePlanningInputs({origin:{latitude:numericField(coordinates.originLatitude),longitude:numericField(coordinates.originLongitude)},destination:{latitude:numericField(coordinates.destinationLatitude),longitude:numericField(coordinates.destinationLongitude)},speedKph:numericField(coordinates.speedKph)});setPreview({inputs,estimate:planningEstimate(inputs)});setIncludePlanning(true);setMapNotice('Planning waypoints will be saved with this plan. Review and deliberately apply estimates or keep manual values.');}catch(e){setPreview(null);setIncludePlanning(false);setError(e instanceof Error?e.message:'Enter valid planning waypoints.');}}
  function changeCoordinate(key:keyof typeof coordinates,value:string){setCoordinates(v=>({...v,[key]:value}));setPreview(null);setIncludePlanning(false);setMapNotice('Waypoints changed. Calculate again to save them. Existing manual distance/time values are retained.');}
- async function submit(e:FormEvent){e.preventDefault();if(busy||!shipment||loading||stale)return;await onSave({shipmentId:shipment.id,expectedShipmentVersion:shipment.version,expectedPlanVersion:basePlan?.version??0,vehicleId,driverId,origin,carrier,plannedDate:day,distanceKm:numericField(distance),estimatedHours:numericField(hours),cost:numericField(cost),planning:includePlanning&&preview?preview.inputs:null});}
+ const eligibilityDay=fleetScheduleDay(day);
+ const vehicleDates=new Map(vehicles.rows.map(row=>[row.id,fleetResourceEligibility('vehicles',row,eligibilityDay)]));
+ const driverDates=new Map(drivers.rows.map(row=>[row.id,fleetResourceEligibility('drivers',row,eligibilityDay)]));
+ const selectedVehicleDates=vehicleDates.get(vehicleId),selectedDriverDates=driverDates.get(driverId);
+ const blockedDates=[...(selectedVehicleDates?.blocked??[]),...(selectedDriverDates?.blocked??[])];
+ const unknownDates=[...(selectedVehicleDates?.unknown??[]),...(selectedDriverDates?.unknown??[])];
+ async function submit(e:FormEvent){e.preventDefault();if(busy||!shipment||loading||stale||blockedDates.length)return;await onSave({shipmentId:shipment.id,expectedShipmentVersion:shipment.version,expectedPlanVersion:basePlan?.version??0,vehicleId,driverId,origin,carrier,plannedDate:day,distanceKm:numericField(distance),estimatedHours:numericField(hours),cost:numericField(cost),planning:includePlanning&&preview?preview.inputs:null});}
  return <form className="operations-form transport-plan-form" onSubmit={e=>void submit(e)} onChangeCapture={onDirty}>
   <fieldset className="ft-form-section" disabled={busy}><legend>Shipment</legend>
   <label>Prepared shipment<select aria-label="Plan shipment" value={shipment?.id??''} disabled={!!initial.plan||loading} required onChange={e=>void selectShipment(e.target.value)}><option value="">Select a prepared shipment…</option>{shipments.filter(s=>s.status==='Prepared').map(s=><option key={s.id} value={s.id}>{val(s,'reference')}</option>)}</select></label>
   {shipment&&<p className="transport-full-row">Recorded destination: {val(shipment,'address')} · Shipment version {shipment.version} · {basePlan?`Plan version ${basePlan.version} (${val(basePlan,'status')})`:'No existing plan'}. Dispatch and resource availability are checked when saved.</p>}{stale&&<p role="alert">The selected shipment changed. Close this editor and review its current facts.</p>}
-  </fieldset><fieldset className="ft-form-section" disabled={busy}><legend>Vehicle and driver</legend><label>Vehicle<select aria-label="Plan vehicle" value={vehicleId} onChange={e=>setVehicleId(e.target.value)} required><option value="">Select from the current vehicle page…</option>{basePlan&&!vehicles.rows.some(v=>v.id===basePlan.vehicleId)&&<option value={String(basePlan.vehicleId)}>Current saved assignment: {val(basePlan,'vehicleName')}</option>}{vehicles.rows.map(v=>{const lock=va.rows.find(a=>a.id===`${member.workspaceId}_vehicle_${v.id}`),effective=effectiveAssignment(v,'vehicles',va,member.workspaceId,shipments);return <option key={v.id} value={v.id} disabled={!va.ready||v.status!=='Available'||!!lock&&lock.shipmentId!==shipment?.id}>{val(v,'name')} · {effective.label}</option>;})}</select></label><label>Driver<select aria-label="Plan driver" value={driverId} onChange={e=>setDriverId(e.target.value)} required><option value="">Select from the current driver page…</option>{basePlan&&!drivers.rows.some(d=>d.id===basePlan.driverId)&&<option value={String(basePlan.driverId)}>Current saved assignment: {val(basePlan,'driverName')}</option>}{drivers.rows.map(d=>{const lock=da.rows.find(a=>a.id===`${member.workspaceId}_driver_${d.id}`),effective=effectiveAssignment(d,'drivers',da,member.workspaceId,shipments);return <option key={d.id} value={d.id} disabled={!da.ready||d.status!=='Available'||!!lock&&lock.shipmentId!==shipment?.id}>{val(d,'name')} · {effective.label}</option>;})}</select></label>
+  </fieldset>
+  <fieldset className="ft-form-section" disabled={busy}><legend>Vehicle and driver</legend>
+   <label>Vehicle<select aria-label="Plan vehicle" value={vehicleId} onChange={e=>setVehicleId(e.target.value)} required>
+    <option value="">Select from the current vehicle page…</option>
+    {basePlan&&!vehicles.rows.some(v=>v.id===basePlan.vehicleId)&&<option value={String(basePlan.vehicleId)}>Current saved assignment: {val(basePlan,'vehicleName')}</option>}
+    {vehicles.rows.map(vehicle=>{
+     const lock=va.rows.find(a=>a.id===`${member.workspaceId}_vehicle_${vehicle.id}`);
+     const effective=effectiveAssignment(vehicle,'vehicles',va,member.workspaceId,shipments);
+     const dates=vehicleDates.get(vehicle.id);
+     const reason=dates?.blocked[0];
+     return <option key={vehicle.id} value={vehicle.id} disabled={!!reason||!va.ready||vehicle.status!=='Available'||!!lock&&lock.shipmentId!==shipment?.id}>
+      {val(vehicle,'name')} · {reason??effective.label}
+     </option>;
+    })}
+   </select></label>
+   <label>Driver<select aria-label="Plan driver" value={driverId} onChange={e=>setDriverId(e.target.value)} required>
+    <option value="">Select from the current driver page…</option>
+    {basePlan&&!drivers.rows.some(d=>d.id===basePlan.driverId)&&<option value={String(basePlan.driverId)}>Current saved assignment: {val(basePlan,'driverName')}</option>}
+    {drivers.rows.map(driver=>{
+     const lock=da.rows.find(a=>a.id===`${member.workspaceId}_driver_${driver.id}`);
+     const effective=effectiveAssignment(driver,'drivers',da,member.workspaceId,shipments);
+     const reason=driverDates.get(driver.id)?.blocked[0];
+     return <option key={driver.id} value={driver.id} disabled={!!reason||!da.ready||driver.status!=='Available'||!!lock&&lock.shipmentId!==shipment?.id}>
+      {val(driver,'name')} · {reason??effective.label}
+     </option>;
+    })}
+   </select></label>
+   <p className="ft-help transport-full-row">Recorded fleet dates are checked for {eligibilityDay} (Malaysia).</p>
+   {!!blockedDates.length&&<p className="error transport-full-row" role="alert">{blockedDates.join(' ')}</p>}
+   {!!unknownDates.length&&<p className="ft-help transport-full-row">Dates not recorded: {unknownDates.join(', ')}.</p>}
   {vehicles.error&&<p role="alert">{vehicles.error}</p>}{drivers.error&&<p role="alert">{drivers.error}</p>}{(va.error||da.error)&&<p role="alert">Resource assignment is unavailable; availability remains unknown.</p>}<div className="transport-full-row"><OperationPager page={vehicles} label="vehicle choices"/><OperationPager page={drivers} label="driver choices"/></div>
   </fieldset><fieldset className="ft-form-section" disabled={busy}><legend>Route and schedule</legend><label>Origin<input aria-label="Plan origin" required maxLength={240} value={origin} onChange={e=>setOrigin(e.target.value)}/></label><label>Carrier<input aria-label="Plan carrier" required maxLength={120} value={carrier} onChange={e=>setCarrier(e.target.value)}/></label><label>Planned date<input aria-label="Plan date" type="date" required value={day} onChange={e=>setDay(e.target.value)}/></label></fieldset><fieldset className="ft-form-section" disabled={busy}><legend>Estimates</legend><label>Distance (km)<input aria-label="Plan distance (km)" type="number" min={0} max={100000} step="any" required value={distance} onChange={e=>setDistance(e.target.value)}/></label><label>Estimated hours<input aria-label="Plan estimated hours" type="number" min="0.1" max={1000} step="any" required value={hours} onChange={e=>setHours(e.target.value)}/></label><label>Estimated cost (MYR)<input aria-label="Plan cost (MYR)" type="number" min={0} max={1000000} step="any" required value={cost} onChange={e=>setCost(e.target.value)}/></label>
   </fieldset><details className="ft-map-disclosure" onToggle={e=>setMapOpen(e.currentTarget.open)}><summary>Optional planning map</summary>{mapOpen&&<fieldset className="transport-full-row transport-waypoints" disabled={busy}><legend>Planning waypoints</legend><p>Enter waypoints deliberately. No GPS capture or address lookup is performed. The dashed line is a great-circle estimate; it does not represent a road route, traffic or a delivery prediction. The basemap uses OpenStreetMap tiles.</p><div className="transport-coordinate-grid">{([['originLatitude','Origin latitude',-90,90],['originLongitude','Origin longitude',-180,180],['destinationLatitude','Destination latitude',-90,90],['destinationLongitude','Destination longitude',-180,180],['speedKph','Planning speed (km/h)',5,120]] as const).map(([key,label,min,max])=><label key={key}>{label}<input aria-label={label} type="number" min={min} max={max} step="any" value={coordinates[key]} onChange={e=>changeCoordinate(key,e.target.value)}/></label>)}</div><button type="button" onClick={calculate}>Calculate planning estimate</button>{mapNotice&&<p>{mapNotice}</p>}
    {preview&&<><p>Great-circle planning estimate: {preview.estimate.distanceKm.toFixed(3)} km · {preview.estimate.estimatedHours.toFixed(3)} hours at {preview.inputs.speedKph} km/h.</p><TransportPlanningMap inputs={preview.inputs}/><div className="integrity-actions"><button type="button" onClick={()=>{setDistance(String(preview.estimate.distanceKm));onDirty();}}>Use estimated distance</button><button type="button" disabled={preview.estimate.estimatedHours<.1||preview.estimate.estimatedHours>1000} onClick={()=>{setHours(String(preview.estimate.estimatedHours));onDirty();}}>Use estimated time</button></div>{preview.estimate.estimatedHours<.1&&<p>The estimate is below the scheduling minimum of 0.1 hours. Enter an explicit admissible manual time; it is never silently clamped.</p>}<label><input type="checkbox" checked={includePlanning} onChange={e=>setIncludePlanning(e.target.checked)}/> Save these planning waypoints and estimate alongside the manual values</label></>}
   </fieldset>}</details>
-  {error&&<p className="error transport-full-row" role="alert">{error}</p>}<footer className="ft-form-footer"><button type="button" className="ft-action" disabled={busy} onClick={onCancel}>Cancel</button><button type="submit" className="ft-action ft-action--accent" disabled={busy||loading||!!stale||!shipment||!va.ready||!da.ready}>Save transport plan</button></footer>
+  {error&&<p className="error transport-full-row" role="alert">{error}</p>}<footer className="ft-form-footer"><button type="button" className="ft-action" disabled={busy} onClick={onCancel}>Cancel</button><button type="submit" className="ft-action ft-action--accent" disabled={busy||loading||!!stale||!shipment||!va.ready||!da.ready||!!blockedDates.length}>Save transport plan</button></footer>
  </form>;
 }

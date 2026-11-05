@@ -6,7 +6,10 @@ import {admin,client,scope,suffix,barcode,fixtureDB,snapshot,close} from './acce
 const inventory=await client('Inventory'),warehouse=await client('Warehouse'),viewer=await client('Viewer');
 const {id:productId}=await createFixtureBusinessRecord(admin,'products',fixtureCreationData('products',{name:`Retry pump ${suffix}`,sku:`RETRY-${suffix}`,barcode:barcode(),category:'Pump',location:'A-01',reorderLevel:3,quantityOnHand:20,reservedQuantity:0,status:'Active',imageDataUrl:''}));
 const receiptId=(actor,operationId)=>createHash('sha256').update(JSON.stringify([scope,actor,operationId])).digest('hex');
-const command=(type,quantity,extra={})=>({productId,type,quantity,reference:`RETRY-${suffix}`,reason:'Count independently checked',operationId:randomUUID(),...extra});
+const command=(type,quantity,extra={})=>{
+  const operationId=randomUUID();
+  return {productId,type,quantity,reference:`RETRY-${suffix}-${operationId}`,reason:'Count independently checked',operationId,...extra};
+};
 const counts=async()=>({movements:(await fixtureDB.collection('stockMovements').where('productId','==',productId).get()).size,approvals:(await fixtureDB.collection('approvals').where('productId','==',productId).get()).size,audits:(await fixtureDB.collection('auditLogs').where('recordId','==',productId).get()).size});
 const denied=fn=>assert.rejects(fn,e=>e.code==='permission-denied'||e.code==='functions/permission-denied');
 try {
@@ -36,8 +39,12 @@ try {
   const again=await inventory.call('stock',adjustment);assert.equal(again.id,requests[0].id);assert.equal(again.pendingApproval,true);
   assert.equal((await snapshot('products',productId)).version,approvedProduct.version);assert.equal((await counts()).approvals,baseline.approvals+1);
 
-  // Business references are not deduplication keys; separate partial receipts count.
-  await inventory.call('stock',command('Receipt',1));await inventory.call('stock',command('Receipt',1));
+  // A new operation cannot reuse a manual reference. Separate partials use their own references.
+  await assert.rejects(()=>inventory.call('stock',{...receipt,operationId:randomUUID()}),/reference.*already/i);
+  const partialBefore=await snapshot('products',productId);
+  await inventory.call('stock',command('Receipt',1,{reference:`RETRY-${suffix}-PART-1`}));
+  await inventory.call('stock',command('Receipt',1,{reference:`RETRY-${suffix}-PART-2`}));
+  assert.equal((await snapshot('products',productId)).quantityOnHand,partialBefore.quantityOnHand+2);
   const bad=command('Issue',1000000);
   await assert.rejects(()=>inventory.call('stock',bad),/Not enough/);
   assert.equal((await fixtureDB.doc(`stockRequests/${receiptId(inventory.uid,bad.operationId)}`).get()).exists,false);
@@ -57,7 +64,7 @@ try {
   assert.equal((await snapshot('products',productId)).quantityOnHand,qBefore+(outcomes[0].notApplied?0:4));
 
   // IDs are actor-scoped, and approval/permission are rechecked before replay.
-  const separate=await warehouse.call('stock',receipt);assert.notEqual(separate.id,replay.id);
+  const separate=await warehouse.call('stock',{...receipt,reference:''});assert.notEqual(separate.id,replay.id);
   await denied(()=>viewer.call('stock',receipt));await denied(()=>viewer.call('resolveStock',receipt));
   await denied(()=>inventory.call('stock',receipt,'foreign-scope'));
   let account=await snapshot('users',inventory.uid);
@@ -74,5 +81,5 @@ try {
     await denied(()=>setDoc(doc(c.db,'stockRequests',randomUUID()),{ownerId:scope,result:{id:'forged'}}));
     await denied(()=>updateDoc(privateDoc,{commandHash:'forged'}));await denied(()=>deleteDoc(privateDoc));
   }
-  console.log('Stock retry emulator QA passed: six movement types, concurrent/repeated submission, one approval, approved replay, changed payload, actor/role/scope isolation, failed requests, resolve races and private ledger rules.');
+  console.log('Stock retry emulator QA passed: six movement types, concurrent/repeated submission, duplicate manual reference denial, distinct partials, approval, actor/role/scope isolation, resolve races and private ledger rules.');
 }finally{await close();}

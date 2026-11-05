@@ -18,6 +18,15 @@ test('strict edits retain existing field limits while rejecting stale/coerced/fo
  const input={operationId:randomUUID(),kind:'vehicles',id:'v1',expectedVersion:1,data:{name:' abc-123 ',capacity:20,status:'Available',maintenanceDate:'2026-10-25',fuelLitres:0}};
  assert.equal(validateFleetUpdate(input).data.name,'ABC-123');for(const patch of [{expectedVersion:'1'},{ownerId:'foreign'},{kind:'suppliers'},{data:{...input.data,capacity:'20'}},{data:{...input.data,maintenanceDate:'2026-02-30'}},{data:{...input.data,status:'Scheduled'}}])assert.throws(()=>validateFleetUpdate({...input,...patch}));
 });
+test('fleet edits validate optional compliance dates and allow an explicit unknown',()=>{
+ const vehicle={operationId:randomUUID(),kind:'vehicles',id:'v1',expectedVersion:1,data:{name:'ABC-123',capacity:20,status:'Available',maintenanceDate:'2099-12-01',fuelLitres:0,inspectionExpiryDate:'2099-12-02',insuranceExpiryDate:''}};
+ const driver={operationId:randomUUID(),kind:'drivers',id:'d1',expectedVersion:1,data:{name:'Driver',userId:'approved-user',licence:'TEST-LICENCE',status:'Available',licenceExpiryDate:'2099-12-01'}};
+ assert.equal(validateFleetUpdate(vehicle).data.inspectionExpiryDate,'2099-12-02');
+ assert.equal(validateFleetUpdate(vehicle).data.insuranceExpiryDate,null);
+ assert.equal(validateFleetUpdate(driver).data.licenceExpiryDate,'2099-12-01');
+ assert.throws(()=>validateFleetUpdate({...driver,data:{...driver.data,licenceExpiryDate:'2099-02-29'}}),/licence expiry date/i);
+ assert.throws(()=>validateFleetUpdate({...vehicle,data:{...vehicle.data,inspectionExpiryDate:123}}),/inspection expiry date/i);
+});
 test('transport allows explicit initial version zero and rejects ETA clamping or invalid dates',()=>{
  const input={operationId:randomUUID(),shipmentId:'s1',expectedShipmentVersion:2,expectedPlanVersion:0,vehicleId:'v1',driverId:'d1',origin:'Warehouse',carrier:'Internal',plannedDate:'2026-10-25',distanceKm:0,estimatedHours:.1,cost:0,planning:{origin:{latitude:0,longitude:0},destination:{latitude:0,longitude:0},speedKph:60}};
  const result=validateTransportRevision(input);assert.equal(result.distanceKm,0);assert.equal(result.estimatedHours,.1);assert.equal(result.planning.speedKph,60);

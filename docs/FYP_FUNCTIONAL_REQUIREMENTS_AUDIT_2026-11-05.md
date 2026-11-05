@@ -1,5 +1,15 @@
 # IILAS functional requirements audit
 
+## Operational gap follow-up on MSI
+
+| Report gap | Local behavior | Remaining scope |
+|---|---|---|
+| Wong FR-18, duplicate manual movement | A nonblank reference is unique for a product and movement type in the shared system. Exact operation retries recover their first result. Pending reviews hold a reference and rejection releases their own claim. The historical check uses references saved in the application's normalized format. | Staff need a distinct reference for each separate manual receipt. Blank references retain operation-ID protection. |
+| Wong FR-27, expected incoming | Issue creates an ordinary expected-incoming record. Partial and full receipts update the per-line and total balances in the same transaction as stock and purchase history. An older issued order with no ledger enters the list at its next receipt using previously recorded quantities. | Ordinary purchases identify their order and purchase event. The original reorder requirement is available on linked demo purchases. |
+| Choong §3.5.4, fleet eligibility | Scheduling and reassignment check recorded driver licence expiry, vehicle inspection/insurance expiry and maintenance due date. Dispatch checks again against the current Malaysia date. Legacy resources with unrecorded dates remain eligible under the existing availability rules and show unknown dates. | Licence-class matching needs an agreed class policy and authoritative matching fields. Alternate-carrier selection and road routing remain separate. |
+
+On the MSI loopback Firestore stack, direct trusted-command checks passed for stock reference replay and historical duplicates, ordinary issue and partial/full receipts with report totals, and both scheduling paths and dispatch under expired fleet dates. All 57 fictional records from those checks were removed. The older audit baseline below describes the findings before these changes.
+
 ## Local follow-up on stock reviews and dashboard alerts
 
 - **Wong FR-28.** In **Reports & Statistics → Stock adjustment & correction reviews**, open **Review details**. The selected request shows the product and SKU, requested direction and reference, current affected-bin balances, the exact original or resulting movement when linked, and up to five dated movements. Older records can have unavailable fields. Review decisions still use the version-checked approval command.

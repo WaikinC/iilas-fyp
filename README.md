@@ -16,6 +16,8 @@ The Customer portal includes Orders and a Delivery monitor. Customers request it
 
 ## What the app does
 
+In the MSI development build, ordinary purchase orders appear in **Replenishment & Procurement → Expected incoming** after issue. Open the tab for the latest receipt totals and expand an order for its purchase lines. For separate manual stock movements, use distinct references for the same product and movement type. Transport scheduling and dispatch check any recorded driver licence, vehicle inspection, insurance and maintenance dates. Fleet forms show whether expiry dates have been recorded.
+
 **Reports & Statistics** provides large inventory/logistics charts, labelled status colours, exact-value tables and links to the underlying records. Open **Overview** and select **Refresh overview**, or choose a focused report in Inventory, Logistics or AI & Verification. Date captions distinguish current stock from dated activity; statistics use complete bounded selections and explain unavailable facts. See the [reporting guide](docs/REPORTS_STATISTICS_LIVE_2026-11-02.md).
 
 For the local FYP demonstration, Fleet Management includes protected resource edits and Transport Management supports explicit pre-dispatch reassignment and labelled map estimates. Reporting & Verification offers bounded filters, safe CSV exports, local blockchain registration, retained integrity observations and independent exception review. An Admin-approved Customer has a separate portal for explicitly granted shipments and current proof downloads. See the [workflow guide](docs/FYP_LOCAL_WORKFLOWS_2026-10-25.md).

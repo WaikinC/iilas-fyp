@@ -1,6 +1,7 @@
 import {getFirestore,FieldValue} from 'firebase-admin/firestore';
 import {createHash} from 'node:crypto';
-import {inputNumber} from './procurementValidation.js';
+import {isDeepStrictEqual} from 'node:util';
+import {inputNumber,purchaseIncomingFacts} from './procurementValidation.js';
 import {assertPreparedBusinessCode} from './businessCodeAllocation.mjs';
 const preparedPlans=new WeakSet();
 const fail=(message,code='failed-precondition')=>{throw Object.assign(new Error(message),{code});};
@@ -12,6 +13,18 @@ const scoped=(snapshot,scope)=>{if(!snapshot.exists||snapshot.data().ownerId!==s
 const expect=(record,version)=>{if(record.version!==version)fail('This record changed. Refresh and try again.');};
 const number=inputNumber;
 const audit=(tx,scope,actor,kind,key,action,version,label)=>tx.set(ref('auditLogs',`${kind}_${key}_${version}`),{ownerId:scope,actor,kind,recordId:key,action,version,label:String(label).slice(0,240),at:now()});
+const storedTime=value=>Number.isSafeInteger(value?.seconds)&&Number.isInteger(value?.nanoseconds)&&value.nanoseconds>=0&&value.nanoseconds<1e9;
+async function prepareIncoming(tx,{key,step,old,result}){
+    const target=ref('expectedReplenishments',key),snapshot=await tx.get(target);
+    let createdAt=storedTime(old.issuedAt)?old.issuedAt:now();
+    if(snapshot.exists){
+      if(step==='Issue')fail('An unissued purchase has an existing expected incoming record.');
+      const {createdAt:original,updatedAt,...saved}=snapshot.data();
+      if(!storedTime(original)||!storedTime(updatedAt)||!isDeepStrictEqual(saved,purchaseIncomingFacts(old,key)))fail('Expected incoming and the purchase order differ. Reconcile before receiving stock.');
+      createdAt=original;
+    }
+    return {target,exists:snapshot.exists,data:{...purchaseIncomingFacts(result,key),createdAt,updatedAt:now()}};
+}
 export async function preparePurchaseTransition(tx,{scope:s,actor,member,command,orderId,old,codeAllocation}){
     const key=orderId,orderRef=ref('purchaseOrders',key);
     if(old&&old.ownerId!==s)fail('Purchase order not found.','not-found');
@@ -70,17 +83,23 @@ export async function preparePurchaseTransition(tx,{scope:s,actor,member,command
       data={...data,items,status:items.every(line=>line.received===line.quantity)?'Received':'PartReceived',lastReceiptReference:command.receiptReference};
     }
     const result={...data,ownerId:s,version,createdAt:old?.createdAt||now(),updatedAt:now(),updatedBy:actor};
-    const prepared={s,actor,member,command,key,orderRef,step,version,eventId,data,referenceKey,receiptKey,receipts,result};
+    const incoming=old&&!Object.hasOwn(old,'demoReorderSource')&&['Issue','Receive'].includes(step)
+      ? await prepareIncoming(tx,{key,step,old,result}) : null;
+    const prepared={s,actor,member,command,key,orderRef,step,version,eventId,data,referenceKey,receiptKey,receipts,result,incoming};
     preparedPlans.add(prepared);return prepared;
 }
 export function writePurchaseTransition(tx,prepared,{stockWrite}){
  if(!preparedPlans.has(prepared))fail('Invalid internal purchase transition.');preparedPlans.delete(prepared);
- const {s,actor,member,command,key,orderRef,step,version,eventId,data,referenceKey,receiptKey,receipts,result}=prepared;
+ const {s,actor,member,command,key,orderRef,step,version,eventId,data,referenceKey,receiptKey,receipts,result,incoming}=prepared;
  const movements=receipts.map(line=>({productId:line.productId,quantity:line.quantity,movementId:stockWrite(tx,s,actor,line.productId,line.product,line.input)}));
     if(referenceKey)tx.set(ref('procurementKeys',referenceKey),{ownerId:s,kind:'purchase',recordId:key});
     if(receiptKey)tx.create(ref('procurementKeys',receiptKey),{ownerId:s,kind:'receipt',recordId:key,eventId});
     tx.set(orderRef,result);
     tx.create(ref('purchaseOrderEvents',eventId),{...result,orderId:key,step,actor,actorName:member.displayName||member.email,actorRole:member.role,at:now(),notes:command.notes||'',receiptReference:command.receiptReference||'',movements});
+    if(incoming){
+      if(incoming.exists)tx.set(incoming.target,incoming.data);
+      else tx.create(incoming.target,incoming.data);
+    }
     audit(tx,s,actor,'purchaseOrders',key,step,version,`${data.reference}: ${command.notes||data.status}`);
     return {id:key,status:data.status,version};
 }

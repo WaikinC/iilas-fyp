@@ -16,6 +16,19 @@ test('complete statistics minimize query round trips while preserving read accou
  assert.equal(state().queries.length,11);
  assert.equal(state().queries.at(-1).cap,1);
 });
+test('expected incoming reports include ordinary and demo records with stored states',async()=>{
+ const createdAt={seconds:Math.floor(Date.parse('2026-10-25T01:00:00+08:00')/1000),nanoseconds:0};
+ put('expectedReplenishments/ordinary',{ownerId:'scope',purchaseOrderId:'ordinary',state:'PartReceived',supplierId:'vendor',outstandingQuantity:6,createdAt});
+ put('expectedReplenishments/demo',{ownerId:'scope',purchaseOrderId:'demo',state:'Expected',supplier:{supplierId:'vendor'},outstandingQuantity:10,createdAt});
+ const filters={dateFrom:'2026-10-25',dateTo:'2026-10-25',supplierId:'vendor'};
+ const source=await call('queryReport',{resource:'expectedReplenishments',filters});
+ assert.deepEqual(source.rows.map(row=>row.status).sort(),['Expected','PartReceived']);
+ assert.deepEqual(source.rows.map(row=>row.outstandingQuantity).sort((a,b)=>a-b),[6,10]);
+ const stats=await call('queryReportStatistics',{preset:'expectedIncoming',filters,interval:'day'});
+ assert.equal(rows(stats),2);
+ const filtered=await call('queryReport',{resource:'expectedReplenishments',filters:{status:'PartReceived'}});
+ assert.equal(filtered.rows[0].purchaseOrderId,'ordinary');
+});
 test('exact cap requires exhaustion and cap plus one or sparse scans refuse',async()=>{
  products(2000);assert.equal(rows(await call('queryReportStatistics',input)),2000);
  products(2001);await assert.rejects(call('queryReportStatistics',input),/complete|limit|narrow/i);
