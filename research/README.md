@@ -1,5 +1,32 @@
 # IILAS research workflows
 
+## Schedule-based inventory model and expanded delivery benchmark — 6 November 2026
+
+The [inventory schedule experiment](INVENTORY_SCHEDULE_PROTOCOL_2026-11-06.md) trained two Random Forests on the same 180 simulated families. Eight supervised development fits completed. The two final models were frozen before scoring 240 scenarios from 60 reserved families once.
+
+| Inventory result on the same holdout | Fourteen-input baseline | Nineteen-input schedule model |
+| --- | ---: | ---: |
+| Accuracy | 65.00% (156/240) | 81.67% (196/240) |
+| Macro-F1 | 0.4963 | 0.7735 |
+| Critical precision | 24.00% (6/25) | 80.00% (20/25) |
+| Critical recall | 21.43% (6/28) | 71.43% (20/28) |
+| Critical cases called Normal | 6 | 0 |
+| False alerts on Normal cases | 28/149 | 18/149 |
+
+The candidate used five additional summaries of known replenishment and commitment schedules. Both arms used the same generated 14-day outcome labels. The candidate still rated eight Critical cases as Reorder Risk. The figures apply to this fresh simulator and are separate from the previous prototype's reported test. Independent warehouse outcomes remain the qualification step. The ignored development and evaluation receipts are in the worktree under `research/datasets/inventory-schedule-v3-*-20261106`. The evaluation confusion matrices were independently reconstructed from the sealed prediction packets.
+
+The [expanded Olist benchmark](OLIST_CONDITIONAL_EXPERIMENT_2026-10-20.md) completed 13 supervised development fits in 99.88 seconds. The Random Forest comparison uses the same 13,445 previously observed validation orders, including 1,280 late orders. Balanced macro-F1 selected the expanded RF at threshold 0.47.
+
+| Olist validation result | Four-input RF | Ten-input RF |
+| --- | ---: | ---: |
+| Accuracy | 79.49% | 81.00% |
+| Macro-F1 | 0.5068 | 0.5593 |
+| Late precision | 10.90% (206/1,890) | 18.52% (375/2,025) |
+| Late recall | 16.09% (206/1,280) | 29.30% (375/1,280) |
+| False alerts | 1,684 | 1,650 |
+
+The six extra features describe basket size, recorded amounts and coarse seller/customer geography. The local research invocation treated these as purchase-time proxies under the protocol's unverified retrospective assumptions. These figures are development evidence about historical binary calendar lateness. The model still missed 905 late orders. The final Olist confirmation set remains reserved, and no app model was promoted. The ignored run `research/datasets/olist-v2-development-20261106` contains both bootstrap comparisons and the exact native fit ledger. Source, run and prediction seals were verified before reporting.
+
 ## Inventory and delivery model development checks — 6 November 2026
 
 These are development comparisons using previously seen validation data. The app continues to serve the frozen models. The parcel study is separate.
