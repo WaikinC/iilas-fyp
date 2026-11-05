@@ -14,9 +14,9 @@ test('filter edits and identity changes cannot publish an earlier response',asyn
  c.setDraft({...request,filters:{sku:'OTHER'}});release(result(request));await first;assert.equal(c.getSnapshot().selected.result,null);assert.equal(c.getSnapshot().selected.status,'idle');
  c.setIdentity({...identity,version:2,role:'Driver'});assert.equal(c.getSnapshot().selected.result,null);assert.throws(()=>c.setDraft(request));c.dispose();
 });
-test('overview issues at most four sequential requests and isolates a failed source',async()=>{
+test('overview loads both charts before count-only requests and isolates a failed source',async()=>{
  let concurrent=0,max=0;const calls=[];const c=createReportStatisticsClient({identity,execute:async(_a,q)=>{concurrent++;max=Math.max(max,concurrent);calls.push(q);await flush();concurrent--;if(q.preset==='purchaseOrders')throw Error('Source unavailable');return result(q);}});
- await c.refreshOverview(dayFilters);assert.equal(max,1);assert.equal(calls.length,4);assert.deepEqual(calls.map(x=>x.preset),['stockCondition','purchaseOrders','shipmentStatus','deliveryStatus']);assert.equal(c.getSnapshot().overview.stockCondition.status,'ready');assert.equal(c.getSnapshot().overview.purchaseOrders.status,'error');assert.equal(c.getSnapshot().overview.deliveryStatus.status,'ready');c.dispose();
+ await c.refreshOverview(dayFilters);assert.equal(max,1);assert.equal(calls.length,4);assert.deepEqual(calls.map(x=>x.preset),['stockCondition','shipmentStatus','purchaseOrders','deliveryStatus']);assert.equal(c.getSnapshot().overview.stockCondition.status,'ready');assert.equal(c.getSnapshot().overview.purchaseOrders.status,'error');assert.equal(c.getSnapshot().overview.deliveryStatus.status,'ready');c.dispose();
 });
 test('tab change stops remaining overview scheduling and disposes late publications',async()=>{
  let release,calls=0,updates=0;const c=createReportStatisticsClient({identity,onChange:()=>updates++,execute:()=>{calls++;return new Promise(r=>{release=r;});}});

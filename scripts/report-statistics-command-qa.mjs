@@ -7,6 +7,15 @@ test('complete statistics count 21 rows while original page still displays 20',a
  assert.equal((await call('queryReport',{resource:'products',filters:{}})).rows.length,20);
  const result=await call('queryReportStatistics',input);assert.equal(rows(result),21);assert.equal(result.coverage.complete,true);assert(!JSON.stringify(result).includes('NOEXPORT'));assert(!Object.hasOwn(result,'rows'));
 });
+test('complete statistics minimize query round trips while preserving read accounting',async()=>{
+ products(2000);
+ const report=await call('queryReportStatistics',input);
+ assert.equal(rows(report),2000);
+ assert.equal(report.coverage.scanned,2000);
+ assert.equal(report.coverage.readCount,2003);
+ assert.equal(state().queries.length,11);
+ assert.equal(state().queries.at(-1).cap,1);
+});
 test('exact cap requires exhaustion and cap plus one or sparse scans refuse',async()=>{
  products(2000);assert.equal(rows(await call('queryReportStatistics',input)),2000);
  products(2001);await assert.rejects(call('queryReportStatistics',input),/complete|limit|narrow/i);
